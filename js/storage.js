@@ -1,0 +1,434 @@
+/* Device storage: localStorage for the desk, IndexedDB for photos. */
+(function (global) {
+  const CJRM = global.CJRM || (global.CJRM = {});
+
+  function blankState() {
+    return {
+      demo: false,
+      operator: "Carpenter Johnny",
+      accounts: (CJRM.CHANNELS || []).map(function (channel) {
+        return { id: "acc-" + channel, channel: channel, label: "", connected: false };
+      }),
+      people: [],
+      messages: [],
+      templates: (CJRM.DEFAULT_TEMPLATES || []).map(function (t) { return Object.assign({}, t); }),
+      settings: Object.assign({}, CJRM.DEFAULT_SETTINGS),
+    };
+  }
+
+  function asPerson(row) {
+    if (!row || typeof row !== "object" || typeof row.id !== "string" || typeof row.name !== "string") return null;
+    const stages = CJRM.STAGES || [];
+    const channels = CJRM.CHANNELS || [];
+    if (channels.indexOf(row.channel) === -1) return null;
+    if (stages.indexOf(row.stage) === -1) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      channel: row.channel,
+      stage: row.stage,
+      unread: Boolean(row.unread),
+      starred: Boolean(row.starred),
+      value: typeof row.value === "number" ? row.value : null,
+      listing: String(row.listing || ""),
+      phone: String(row.phone || ""),
+      phone2: String(row.phone2 || ""),
+      email: String(row.email || ""),
+      city: String(row.city || ""),
+      address: String(row.address || ""),
+      notes: String(row.notes || ""),
+      igHandle: String(row.igHandle || ""),
+      fbHandle: String(row.fbHandle || ""),
+      photoIds: Array.isArray(row.photoIds) ? row.photoIds.map(String) : [],
+      snoozeUntil: row.snoozeUntil ? String(row.snoozeUntil) : null,
+      followUpAt: row.followUpAt ? String(row.followUpAt) : null,
+      createdAt: String(row.createdAt || new Date().toISOString()),
+      lastMessageAt: String(row.lastMessageAt || new Date().toISOString()),
+    };
+  }
+
+  function asMessage(row) {
+    if (!row || typeof row !== "object") return null;
+    if (typeof row.id !== "string" || typeof row.body !== "string") return null;
+    const personId = row.personId || row.leadId;
+    if (typeof personId !== "string") return null;
+    if ((CJRM.CHANNELS || []).indexOf(row.channel) === -1) return null;
+    if (row.direction !== "in" && row.direction !== "out" && row.direction !== "note") return null;
+    return {
+      id: row.id,
+      personId: personId,
+      direction: row.direction,
+      channel: row.channel,
+      body: row.body,
+      at: String(row.at || new Date().toISOString()),
+      sourceId: row.sourceId ? String(row.sourceId) : "",
+    };
+  }
+
+  function loadRaw() {
+    try {
+      const raw = localStorage.getItem(CJRM.STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function persist(state) {
+    const bag = {
+      v: 1,
+      demo: Boolean(state.demo),
+      operator: state.operator,
+      accounts: state.accounts,
+      people: state.people,
+      messages: state.messages,
+      templates: state.templates,
+      settings: state.settings,
+    };
+    localStorage.setItem(CJRM.STORAGE_KEY, JSON.stringify(bag));
+  }
+
+  let state = blankState();
+
+  function hydrate() {
+    const raw = loadRaw();
+    if (!raw) {
+      state = CJRM.buildDemo(Date.now());
+      persist(state);
+      return state;
+    }
+    const people = Array.isArray(raw.people || raw.leads)
+      ? (raw.people || raw.leads).map(asPerson).filter(Boolean)
+      : [];
+    const messages = Array.isArray(raw.messages) ? raw.messages.map(asMessage).filter(Boolean) : [];
+    const accounts = Array.isArray(raw.accounts) && raw.accounts.length
+      ? (CJRM.CHANNELS || []).map(function (channel) {
+          const found = raw.accounts.find(function (a) { return a && a.channel === channel; });
+          return {
+            id: "acc-" + channel,
+            channel: channel,
+            label: found ? String(found.label || "") : "",
+            connected: found ? Boolean(found.connected) : false,
+          };
+        })
+      : blankState().accounts;
+    state = {
+      demo: Boolean(raw.demo),
+      operator: typeof raw.operator === "string" && raw.operator.trim() ? raw.operator : "Carpenter Johnny",
+      accounts: accounts,
+      people: people,
+      messages: messages,
+      templates: Array.isArray(raw.templates) && raw.templates.length
+        ? raw.templates.map(function (t) {
+            return { id: String(t.id || CJRM.uid()), title: String(t.title || ""), body: String(t.body || "") };
+          })
+        : (CJRM.DEFAULT_TEMPLATES || []).map(function (t) { return Object.assign({}, t); }),
+      settings: Object.assign({}, CJRM.DEFAULT_SETTINGS, raw.settings || {}),
+    };
+    if (!Array.isArray(state.settings.seenHubIds)) state.settings.seenHubIds = [];
+    return state;
+  }
+
+  function getState() {
+    return state;
+  }
+
+  function setState(patch) {
+    state = Object.assign({}, state, patch);
+    persist(state);
+    return state;
+  }
+
+  function loadDemo(now) {
+    state = CJRM.buildDemo(now == null ? Date.now() : now);
+    persist(state);
+    return state;
+  }
+
+  function clearDesk() {
+    state = blankState();
+    persist(state);
+    return state;
+  }
+
+  function personById(id) {
+    return state.people.find(function (p) { return p.id === id; }) || null;
+  }
+
+  function patchPerson(id, patch) {
+    state.people = state.people.map(function (p) {
+      if (p.id !== id) return p;
+      return Object.assign({}, p, patch, { id: p.id });
+    });
+    persist(state);
+    return personById(id);
+  }
+
+  function addMessage(personId, fields) {
+    const at = fields.at || new Date().toISOString();
+    const message = {
+      id: fields.id || CJRM.uid(),
+      personId: personId,
+      direction: fields.direction,
+      channel: fields.channel,
+      body: String(fields.body || "").trim(),
+      at: at,
+      sourceId: fields.sourceId || "",
+    };
+    if (!message.body) return null;
+    state.messages = state.messages.concat([message]);
+    state.people = state.people.map(function (p) {
+      if (p.id !== personId) return p;
+      const next = Object.assign({}, p, { lastMessageAt: message.direction === "note" ? p.lastMessageAt : at });
+      if (message.direction === "in") next.unread = true;
+      if (message.direction === "out") {
+        next.unread = false;
+        if (p.stage === "new") next.stage = "contacted";
+      }
+      return next;
+    });
+    persist(state);
+    return message;
+  }
+
+  function newPerson(input, messageBody) {
+    const at = input.createdAt || new Date().toISOString();
+    const person = {
+      id: input.id || CJRM.uid(),
+      name: (input.name || "New lead").trim() || "New lead",
+      channel: input.channel || "manual",
+      stage: input.stage || "new",
+      unread: input.unread !== false,
+      starred: Boolean(input.starred),
+      value: typeof input.value === "number" ? input.value : null,
+      listing: String(input.listing || ""),
+      phone: String(input.phone || ""),
+      phone2: String(input.phone2 || ""),
+      email: String(input.email || ""),
+      city: String(input.city || ""),
+      address: String(input.address || ""),
+      notes: String(input.notes || ""),
+      igHandle: String(input.igHandle || ""),
+      fbHandle: String(input.fbHandle || ""),
+      photoIds: [],
+      snoozeUntil: input.snoozeUntil || null,
+      followUpAt: input.followUpAt || null,
+      createdAt: at,
+      lastMessageAt: at,
+    };
+    state.people = [person].concat(state.people);
+    state.accounts = state.accounts.map(function (a) {
+      if (a.channel !== person.channel) return a;
+      return Object.assign({}, a, { connected: true, label: a.label || a.channel });
+    });
+    if (messageBody) {
+      state.messages = state.messages.concat([{
+        id: CJRM.uid(),
+        personId: person.id,
+        direction: input.direction || "in",
+        channel: person.channel,
+        body: String(messageBody).trim(),
+        at: at,
+        sourceId: input.sourceId || "",
+      }]);
+    }
+    persist(state);
+    return person;
+  }
+
+  function removePerson(id) {
+    state.people = state.people.filter(function (p) { return p.id !== id; });
+    state.messages = state.messages.filter(function (m) { return m.personId !== id; });
+    persist(state);
+  }
+
+  function filePieces(pieces, opts) {
+    opts = opts || {};
+    const settings = state.settings || {};
+    const phones = {
+      phone1: settings.shopPhone || (state.accounts.find(function (a) { return a.channel === "phone1"; }) || {}).label || "",
+      phone2: settings.personalPhone || (state.accounts.find(function (a) { return a.channel === "phone2"; }) || {}).label || "",
+    };
+    let filed = 0;
+    const results = [];
+    pieces.forEach(function (piece) {
+      const channel = piece.channel || CJRM.classifyMail(piece, phones);
+      const name = piece.name || CJRM.nameFromMail(piece, channel);
+      const body = [piece.subject, piece.body].filter(Boolean).join("\n").trim();
+      if (!body) return;
+      const sourceId = piece.id || piece.sourceId || "";
+      if (sourceId && state.messages.some(function (m) { return m.sourceId && m.sourceId === sourceId; })) {
+        results.push({ status: "duplicate", sourceId: sourceId });
+        return;
+      }
+      const extractedPhones = CJRM.extractPhones(body + " " + (piece.from || ""));
+      const email = piece.email || CJRM.emailFromHeader(piece.from) || (CJRM.extractEmails(body)[0] || "");
+      const phone = piece.phone || extractedPhones[0] || "";
+      const existing = CJRM.matchPerson(state.people, { phone: phone, email: email, name: name, body: body });
+      if (existing) {
+        const duplicate = state.messages.some(function (m) {
+          return m.personId === existing.id && m.body === body;
+        });
+        if (!duplicate) {
+          addMessage(existing.id, {
+            direction: "in",
+            channel: channel,
+            body: body,
+            at: piece.date || piece.at || new Date().toISOString(),
+            sourceId: sourceId,
+          });
+          if (!existing.phone && phone) patchPerson(existing.id, { phone: phone });
+          if (!existing.email && email) patchPerson(existing.id, { email: email });
+          if (CJRM.isClosed(existing)) patchPerson(existing.id, { stage: "contacted" });
+        }
+        results.push({ status: duplicate ? "duplicate" : "matched", personId: existing.id, channel: channel });
+      } else {
+        const person = newPerson({
+          name: name,
+          channel: channel,
+          phone: phone,
+          email: email,
+          listing: piece.subject || "",
+          notes: "Filed from the mailbox.",
+          sourceId: sourceId,
+          createdAt: piece.date || piece.at,
+        }, body);
+        results.push({ status: "created", personId: person.id, channel: channel });
+      }
+      filed += 1;
+    });
+    if (opts.markDemo === false) {
+      /* leave demo flag alone */
+    }
+    return { filed: filed, results: results };
+  }
+
+  function exportBag() {
+    return {
+      v: 1,
+      app: CJRM.APP_NAME,
+      version: CJRM.VERSION,
+      exportedAt: new Date().toISOString(),
+      demo: state.demo,
+      operator: state.operator,
+      accounts: state.accounts,
+      people: state.people,
+      messages: state.messages,
+      templates: state.templates,
+      settings: Object.assign({}, state.settings, { hubSecret: state.settings.hubSecret ? "(stored on device, omitted from this file)" : "" }),
+    };
+  }
+
+  function importBag(raw, secretToKeep) {
+    let parsed;
+    try {
+      parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    } catch (e) {
+      return "That file isn't JSON.";
+    }
+    if (!parsed || typeof parsed !== "object") return "Nothing to import.";
+    const people = Array.isArray(parsed.people || parsed.leads)
+      ? (parsed.people || parsed.leads).map(asPerson).filter(Boolean)
+      : [];
+    const messages = Array.isArray(parsed.messages) ? parsed.messages.map(asMessage).filter(Boolean) : [];
+    if (people.length === 0) return "No people in that file.";
+    const importedSettings = Object.assign({}, CJRM.DEFAULT_SETTINGS, parsed.settings || {});
+    if (importedSettings.hubSecret === "(stored on device, omitted from this file)") {
+      importedSettings.hubSecret = secretToKeep || state.settings.hubSecret || "";
+    }
+    state = {
+      demo: Boolean(parsed.demo),
+      operator: typeof parsed.operator === "string" && parsed.operator.trim() ? parsed.operator : state.operator,
+      accounts: Array.isArray(parsed.accounts)
+        ? (CJRM.CHANNELS || []).map(function (channel) {
+            const found = parsed.accounts.find(function (a) { return a && a.channel === channel; });
+            return {
+              id: "acc-" + channel,
+              channel: channel,
+              label: found ? String(found.label || "") : "",
+              connected: found ? Boolean(found.connected) : false,
+            };
+          })
+        : blankState().accounts,
+      people: people,
+      messages: messages,
+      templates: Array.isArray(parsed.templates) && parsed.templates.length
+        ? parsed.templates.map(function (t) {
+            return { id: String(t.id || CJRM.uid()), title: String(t.title || ""), body: String(t.body || "") };
+          })
+        : state.templates,
+      settings: importedSettings,
+    };
+    persist(state);
+    return null;
+  }
+
+  /* Photos in IndexedDB */
+  function openPhotoDb() {
+    return new Promise(function (resolve, reject) {
+      const req = indexedDB.open(CJRM.PHOTO_DB, 1);
+      req.onupgradeneeded = function () {
+        if (!req.result.objectStoreNames.contains("photos")) req.result.createObjectStore("photos");
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  async function savePhoto(personId, blob) {
+    const id = CJRM.uid();
+    const db = await openPhotoDb();
+    await new Promise(function (resolve, reject) {
+      const tx = db.transaction("photos", "readwrite");
+      tx.objectStore("photos").put({ id: id, personId: personId, type: blob.type, blob: blob, at: Date.now() }, id);
+      tx.oncomplete = resolve;
+      tx.onerror = function () { reject(tx.error); };
+    });
+    const person = personById(personId);
+    if (person) patchPerson(personId, { photoIds: (person.photoIds || []).concat([id]) });
+    return id;
+  }
+
+  async function loadPhoto(id) {
+    const db = await openPhotoDb();
+    return new Promise(function (resolve, reject) {
+      const tx = db.transaction("photos", "readonly");
+      const req = tx.objectStore("photos").get(id);
+      req.onsuccess = function () { resolve(req.result || null); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  async function deletePhoto(personId, id) {
+    const db = await openPhotoDb();
+    await new Promise(function (resolve, reject) {
+      const tx = db.transaction("photos", "readwrite");
+      tx.objectStore("photos").delete(id);
+      tx.oncomplete = resolve;
+      tx.onerror = function () { reject(tx.error); };
+    });
+    const person = personById(personId);
+    if (person) patchPerson(personId, { photoIds: (person.photoIds || []).filter(function (x) { return x !== id; }) });
+  }
+
+  CJRM.blankState = blankState;
+  CJRM.hydrate = hydrate;
+  CJRM.getState = getState;
+  CJRM.setState = setState;
+  CJRM.loadDemo = loadDemo;
+  CJRM.clearDesk = clearDesk;
+  CJRM.personById = personById;
+  CJRM.patchPerson = patchPerson;
+  CJRM.addMessage = addMessage;
+  CJRM.newPerson = newPerson;
+  CJRM.removePerson = removePerson;
+  CJRM.filePieces = filePieces;
+  CJRM.exportBag = exportBag;
+  CJRM.importBag = importBag;
+  CJRM.savePhoto = savePhoto;
+  CJRM.loadPhoto = loadPhoto;
+  CJRM.deletePhoto = deletePhoto;
+  CJRM.asPerson = asPerson;
+  CJRM.asMessage = asMessage;
+})(window);

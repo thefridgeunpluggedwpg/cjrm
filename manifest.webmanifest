@@ -1,0 +1,19 @@
+{
+  "id": "/cjrm/",
+  "name": "CJRM",
+  "short_name": "CJRM",
+  "description": "Carpenter Johnny Relationship Management — every lead in one list so nothing slips.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171c1b",
+  "theme_color": "#b01c22",
+  "orientation": "portrait",
+  "display_override": ["standalone"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

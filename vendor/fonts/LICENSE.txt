@@ -1,0 +1,3 @@
+Alfa Slab One (Jaime Radom, Copyright 2011) and Barlow (Jeremy Tribby, Copyright 2017 The Barlow Project Authors) are licensed under the SIL Open Font License, Version 1.1.
+https://scripts.sil.org/OFL
+These files were already used on CarpenterCam and are vendored here so the PWA works offline.

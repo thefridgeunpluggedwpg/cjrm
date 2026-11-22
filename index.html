@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CJRM</title>
+<meta name="description" content="Carpenter Johnny Relationship Management — every lead in one list so nothing slips. Data stays on this device.">
+<meta name="theme-color" content="#b01c22">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CJRM">
+<meta name="application-name" content="CJRM">
+<meta name="cjrm-version" content="1.0.0">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<a class="skip" href="#view">Skip to desk</a>
+<header class="app-header">
+  <button class="brand" type="button" id="btnHome" aria-label="CJRM home">
+    <img src="icons/icon-192.png" width="36" height="36" alt="">
+    <span>
+      <strong>CJRM</strong>
+      <small>Carpenter Johnny</small>
+    </span>
+  </button>
+  <div class="header-actions">
+    <span class="pin-count" id="pinCount" data-empty="true" hidden>0 due</span>
+    <button class="btn-ghost" type="button" id="btnInstall" hidden>Install</button>
+  </div>
+</header>
+<div class="demo-banner" id="demoBanner" hidden>
+  <strong>Demo data</strong> — fictional leads for testing, not real clients.
+  <button type="button" id="btnDismissDemo">Hide</button>
+</div>
+<div id="installBanner" role="region" aria-label="Install this app" hidden>
+  <p id="installCopy"></p>
+  <div class="row">
+    <button class="btn" type="button" id="btnInstallNow">Install</button>
+    <button class="btn-secondary" type="button" id="btnInstallDismiss">Not now</button>
+  </div>
+  <ol class="ios-steps" id="iosSteps" hidden>
+    <li>Open this page in Chrome on the Android phone.</li>
+    <li>Tap the browser menu, then Install app.</li>
+  </ol>
+</div>
+<main id="view" tabindex="-1"></main>
+<nav class="tabbar" aria-label="Main">
+  <button type="button" data-view="desk" aria-current="page">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    Desk
+  </button>
+  <button type="button" data-view="add">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    Add
+  </button>
+  <button type="button" data-view="more">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="18" r="1.2"/></svg>
+    More
+  </button>
+</nav>
+<script src="js/config.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/hub.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

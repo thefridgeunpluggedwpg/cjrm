@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "id": "demo-hub-mara",
+      "from": "Kijiji <reply@kijiji.example.invalid>",
+      "subject": "Reply from Mara Ellison — garden shed",
+      "body": "Still interested. You can text me at 204-555-0172.",
+      "date": "2026-11-21T12:00:00.000Z"
+    },
+    {
+      "id": "demo-hub-nadia",
+      "from": "Kijiji <reply@kijiji.example.invalid>",
+      "subject": "Reply from Nadia Brooks — oak vanity",
+      "body": "Is the oak vanity still available? I can pick up Thursday with a van.",
+      "date": "2026-11-21T12:05:00.000Z"
+    }
+  ]
+}
