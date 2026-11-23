@@ -1,4 +1,4 @@
-"""CJRM v1.1.6 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.7 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -86,6 +86,20 @@ def touch_hold_then_move(page, x, y, dx, dy, hold_ms=550, steps=16):
 
 
 
+
+def hub_btn(page, sel):
+    """Label and connected state of a mailbox Test connection button."""
+    return page.evaluate(r"""(sel) => {
+      const b = document.querySelector(sel);
+      if (!b) return null;
+      return {
+        text: (b.innerText || "").replace(/\s+/g, " ").trim(),
+        state: b.getAttribute("data-hub-state"),
+        connected: b.classList.contains("is-connected"),
+      };
+    }""", sel)
+
+
 def mock_hub(page, url="https://example.com/cjrm-hub"):
     page.route("https://example.com/cjrm-hub**", lambda route: route.fulfill(
         status=200,
@@ -156,7 +170,7 @@ def main():
         page.wait_for_function("() => window.CJRM && CJRM.getState && document.querySelector('#onboard')")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.6")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.7")
         fresh = page.evaluate("""() => {
           const s = CJRM.getState();
           const names = (s.people || []).map((p) => p.name);
@@ -181,6 +195,12 @@ def main():
 
         page.click("#btnOnboardPhoneNext")
         page.wait_for_selector("#onboardHubUrl")
+        untested = hub_btn(page, "#btnOnboardTestHub")
+        check(
+            "onboarding Test connection is red before a successful test",
+            untested is not None and untested["state"] == "untested" and untested["connected"] is False and "test connection" in untested["text"].lower(),
+            untested,
+        )
         check("email continue is disabled before a green check", page.locator("#btnOnboardFinish").is_disabled())
         page.click("#btnOnboardFinish", force=True)
         check("email step stays put if Continue is used without a green check", page.locator("#onboardHubUrl").count() == 1 and page.evaluate("CJRM.isOnboarded()") is False)
@@ -199,17 +219,68 @@ def main():
           disabled: document.querySelector('#btnOnboardFinish') && document.querySelector('#btnOnboardFinish').disabled,
         })""")
         check("failed mailbox test does not show a green check", failed["ok"] is False and failed["err"] is True and failed["disabled"] is True, failed)
+        still_red = hub_btn(page, "#btnOnboardTestHub")
+        check(
+            "onboarding Test connection stays red after a failed test",
+            still_red is not None and still_red["state"] == "untested" and still_red["connected"] is False and "test connection" in still_red["text"].lower(),
+            still_red,
+        )
         mock_hub(page)
         page.fill("#onboardHubUrl", "https://example.com/cjrm-hub")
         page.click("#btnOnboardTestHub")
         page.wait_for_selector("#onboardHubOk")
         check("successful mailbox test shows a green check", "Mailbox connected" in page.inner_text("#onboardHubOk") and page.locator("#btnOnboardFinish").is_enabled())
+        connected = hub_btn(page, "#btnOnboardTestHub")
+        check(
+            "onboarding Test connection turns green and says Connected after a successful test",
+            connected is not None and connected["state"] == "connected" and connected["connected"] is True and "connected" in connected["text"].lower(),
+            connected,
+        )
+        page.fill("#onboardHubUrl", "https://example.com/cjrm-hub-edited")
+        page.wait_for_timeout(50)
+        edited = hub_btn(page, "#btnOnboardTestHub")
+        check(
+            "onboarding Test connection goes red again if the URL is edited",
+            edited is not None and edited["state"] == "untested" and edited["connected"] is False and "test connection" in edited["text"].lower() and page.locator("#btnOnboardFinish").is_disabled(),
+            edited,
+        )
+        page.fill("#onboardHubUrl", "https://example.com/cjrm-hub")
+        page.click("#btnOnboardTestHub")
+        page.wait_for_selector("#btnOnboardTestHub[data-hub-state='connected']")
         page.click("#btnOnboardFinish")
         page.wait_for_function("() => CJRM.isOnboarded && CJRM.isOnboarded()")
         page.wait_for_selector(".empty-desk")
         empty = page.inner_text(".empty-desk")
         check("empty Desk shows Waiting for your first message", "waiting for your first message" in empty.lower(), empty)
         check("empty Desk still has no demo people", page.evaluate("() => CJRM.getState().people.length") == 0)
+
+        page.evaluate("() => { CJRM.setView('more'); }")
+        page.wait_for_selector("#btnTestHub")
+        more_ok = hub_btn(page, "#btnTestHub")
+        check(
+            "More Test connection is green and says Connected after a successful test",
+            more_ok is not None and more_ok["state"] == "connected" and more_ok["connected"] is True and "connected" in more_ok["text"].lower(),
+            more_ok,
+        )
+        page.fill("#hubSecret", "changed-secret")
+        page.wait_for_timeout(50)
+        more_edited = hub_btn(page, "#btnTestHub")
+        check(
+            "More Test connection goes red if the secret is edited",
+            more_edited is not None and more_edited["state"] == "untested" and more_edited["connected"] is False and "test connection" in more_edited["text"].lower(),
+            more_edited,
+        )
+        page.fill("#hubSecret", "test-secret")
+        page.click("#btnTestHub")
+        page.wait_for_selector("#btnTestHub[data-hub-state='connected']")
+        more_retest = hub_btn(page, "#btnTestHub")
+        check(
+            "More Test connection turns green again after a re-test",
+            more_retest is not None and more_retest["state"] == "connected" and "connected" in more_retest["text"].lower(),
+            more_retest,
+        )
+        page.evaluate("() => { CJRM.setView('desk'); }")
+        page.wait_for_selector(".empty-desk")
 
         purged = page.evaluate("""() => {
           const now = new Date().toISOString();
@@ -1050,7 +1121,7 @@ def main():
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.6", "Version 1.1.6" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.7", "Version 1.1.7" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)

@@ -183,6 +183,9 @@
       hubUrl: prev.hubUrl || state.settings.hubUrl || "",
       hubSecret: prev.hubSecret || state.settings.hubSecret || "",
       seenHubIds: Array.isArray(prev.seenHubIds) ? prev.seenHubIds : (state.settings.seenHubIds || []),
+      hubVerified: Boolean(prev.hubVerified),
+      hubVerifiedUrl: prev.hubVerifiedUrl || "",
+      hubVerifiedSecret: prev.hubVerifiedSecret || "",
     });
     persist(state);
     return state;
@@ -468,7 +471,10 @@
       people: state.people,
       messages: state.messages,
       templates: state.templates,
-      settings: Object.assign({}, state.settings, { hubSecret: state.settings.hubSecret ? "(stored on device, omitted from this file)" : "" }),
+      settings: Object.assign({}, state.settings, {
+        hubSecret: state.settings.hubSecret ? "(stored on device, omitted from this file)" : "",
+        hubVerifiedSecret: state.settings.hubVerifiedSecret ? "(stored on device, omitted from this file)" : "",
+      }),
     };
   }
 
@@ -488,6 +494,9 @@
     const importedSettings = Object.assign({}, CJRM.DEFAULT_SETTINGS, parsed.settings || {});
     if (importedSettings.hubSecret === "(stored on device, omitted from this file)") {
       importedSettings.hubSecret = secretToKeep || state.settings.hubSecret || "";
+    }
+    if (importedSettings.hubVerifiedSecret === "(stored on device, omitted from this file)") {
+      importedSettings.hubVerifiedSecret = state.settings.hubVerifiedSecret || importedSettings.hubSecret || "";
     }
     if (state.settings && state.settings.onboarded) importedSettings.onboarded = true;
     state = {

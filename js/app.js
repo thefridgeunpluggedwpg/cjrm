@@ -315,6 +315,93 @@
   CJRM.ui = ui;
   CJRM.setView = setView;
 
+  function hubInputValues() {
+    if ($("onboardHubUrl")) {
+      return {
+        url: ($("onboardHubUrl").value || "").trim(),
+        secret: (($("onboardHubSecret") && $("onboardHubSecret").value) || "").trim(),
+      };
+    }
+    return {
+      url: (($("hubUrl") && $("hubUrl").value) || "").trim(),
+      secret: (($("hubSecret") && $("hubSecret").value) || "").trim(),
+    };
+  }
+
+  function hubIsVerified(url, secret) {
+    const s = (CJRM.getState().settings || {});
+    return Boolean(s.hubVerified) && s.hubVerifiedUrl === (url || "") && s.hubVerifiedSecret === (secret || "");
+  }
+
+  function setHubVerified(ok, url, secret) {
+    CJRM.setState({
+      settings: Object.assign({}, CJRM.getState().settings, {
+        hubUrl: url,
+        hubSecret: secret,
+        hubVerified: Boolean(ok),
+        hubVerifiedUrl: ok ? url : "",
+        hubVerifiedSecret: ok ? secret : "",
+      }),
+    });
+    ui.hubTestOk = Boolean(ok);
+    if (ok) ui.hubTestError = "";
+  }
+
+  function hubTestButtonHtml(id, url, secret) {
+    const ok = hubIsVerified(url, secret);
+    const icon = '<svg class="hub-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return '<button type="button" class="btn-hub-test' + (ok ? " is-connected" : "") + '" id="' + id + '" data-hub-state="' + (ok ? "connected" : "untested") + '">' +
+      (ok ? icon + " Connected" : "Test connection") +
+      "</button>";
+  }
+
+  function paintHubTestButton(id) {
+    const btn = $(id);
+    if (!btn) return;
+    const cur = hubInputValues();
+    const ok = hubIsVerified(cur.url, cur.secret);
+    const icon = '<svg class="hub-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    btn.classList.toggle("is-connected", ok);
+    btn.setAttribute("data-hub-state", ok ? "connected" : "untested");
+    btn.innerHTML = ok ? icon + " Connected" : "Test connection";
+    ui.hubTestOk = ok;
+    const finish = $("btnOnboardFinish");
+    if (finish) finish.disabled = !ok;
+    const okLine = $("onboardHubOk");
+    if (okLine) okLine.hidden = !ok;
+    return ok;
+  }
+
+  function bindHubTestFields(ids, buttonId) {
+    ids.forEach(function (fid) {
+      const el = $(fid);
+      if (!el) return;
+      el.addEventListener("input", function () { paintHubTestButton(buttonId); });
+      el.addEventListener("change", function () { paintHubTestButton(buttonId); });
+    });
+  }
+
+  async function runHubTest(buttonId) {
+    const cur = hubInputValues();
+    ui.hubTestError = "";
+    ui.hubTestOk = false;
+    setHubVerified(false, cur.url, cur.secret);
+    const btn = $(buttonId);
+    if (btn) btn.disabled = true;
+    try {
+      if (typeof CJRM.nativeSetHubConfig === "function") {
+        CJRM.nativeSetHubConfig(cur.url, cur.secret).catch(function () {});
+      }
+      await CJRM.pollHub();
+      setHubVerified(true, cur.url, cur.secret);
+    } catch (err) {
+      setHubVerified(false, cur.url, cur.secret);
+      ui.hubTestError = (err && err.message) ? err.message : "Could not reach the mailbox.";
+    }
+    if (btn) btn.disabled = false;
+    render();
+  }
+
   function phonePermsGranted(status) {
     status = status || {};
     return Boolean(status.smsReceiveGranted && status.smsReadGranted && status.contactsGranted);
@@ -349,14 +436,17 @@
         "<p class='lede'>You can continue here to connect your email. Texts will file once you install the Android app.</p>" +
         '<button type="button" class="btn" id="btnOnboardPhoneNext">Continue to email</button>';
     } else {
-      const ok = Boolean(ui.hubTestOk);
+      const url = settings.hubUrl || "";
+      const secret = settings.hubSecret || "";
+      const ok = hubIsVerified(url, secret);
+      ui.hubTestOk = ok;
       const err = ui.hubTestError ? "<p class='status-bad' id='onboardHubError'>" + esc(ui.hubTestError) + "</p>" : "";
       const green = ok ? '<p class="status-ok" id="onboardHubOk">Mailbox connected</p>' : "";
       body = "<h1>Connect your email</h1>" +
         "<p class='lede why'>Paste the mailbox hub URL and the same secret you set in the Apps Script. CJRM will check the connection before opening the desk.</p>" +
-        '<label class="field"><span>Hub URL</span><input id="onboardHubUrl" type="url" autocomplete="off" value="' + esc(settings.hubUrl || "") + '"></label>' +
-        '<label class="field"><span>Shared secret</span><input id="onboardHubSecret" type="password" autocomplete="off" value="' + esc(settings.hubSecret || "") + '"></label>' +
-        '<button type="button" class="btn-secondary" id="btnOnboardTestHub">Test connection</button>' +
+        '<label class="field"><span>Hub URL</span><input id="onboardHubUrl" type="url" autocomplete="off" value="' + esc(url) + '"></label>' +
+        '<label class="field"><span>Shared secret</span><input id="onboardHubSecret" type="password" autocomplete="off" value="' + esc(secret) + '"></label>' +
+        hubTestButtonHtml("btnOnboardTestHub", url, secret) +
         green + err +
         '<button type="button" class="btn" id="btnOnboardFinish"' + (ok ? "" : " disabled") + ">Open the desk</button>";
     }
@@ -764,6 +854,7 @@
       "<p class='lede'>Paste the Apps Script web-app URL and the shared secret from ONBOARDING.md. While CJRM is open, it checks the mailbox every 30 seconds, and again as soon as you come back to the app. You can still tap Check mailbox now if you want an extra check.</p>" +
       field("Endpoint URL", "hubUrl", s.hubUrl, "url") +
       '<label class="field"><span>Shared secret</span><input id="hubSecret" type="password" value="' + esc(s.hubSecret) + '" autocomplete="off"></label>' +
+      hubTestButtonHtml("btnTestHub", s.hubUrl || "", (s.hubSecret || "").trim()) +
       field("Winnipeg number (for tagging forwarded texts)", "shopPhone", s.shopPhone, "tel") +
       field("Toronto number", "personalPhone", s.personalPhone, "tel") +
       status +
@@ -1039,32 +1130,14 @@
       ui.onboardStep = 2;
       render();
     });
+    bindHubTestFields(["onboardHubUrl", "onboardHubSecret"], "btnOnboardTestHub");
     const testBtn = $("btnOnboardTestHub");
-    if (testBtn) testBtn.addEventListener("click", async function () {
-      const url = ($("onboardHubUrl") && $("onboardHubUrl").value.trim()) || "";
-      const secret = ($("onboardHubSecret") && $("onboardHubSecret").value.trim()) || "";
-      ui.hubTestOk = false;
-      ui.hubTestError = "";
-      CJRM.setState({
-        settings: Object.assign({}, CJRM.getState().settings, { hubUrl: url, hubSecret: secret })
-      });
-      try {
-        if (typeof CJRM.nativeSetHubConfig === "function") {
-          CJRM.nativeSetHubConfig(url, secret).catch(function () {});
-        }
-        await CJRM.pollHub();
-        ui.hubTestOk = true;
-      } catch (err) {
-        ui.hubTestOk = false;
-        ui.hubTestError = (err && err.message) ? err.message : "Could not reach the mailbox.";
-      }
-      render();
-    });
+    if (testBtn) testBtn.addEventListener("click", function () { runHubTest("btnOnboardTestHub"); });
     const finish = $("btnOnboardFinish");
     if (finish) finish.addEventListener("click", function () {
-      if (!ui.hubTestOk) return;
       const url = ($("onboardHubUrl") && $("onboardHubUrl").value.trim()) || "";
       const secret = ($("onboardHubSecret") && $("onboardHubSecret").value.trim()) || "";
+      if (!hubIsVerified(url, secret)) return;
       CJRM.setState({
         settings: Object.assign({}, CJRM.getState().settings, { onboarded: true, hubUrl: url, hubSecret: secret })
       });
@@ -1282,6 +1355,8 @@
       setView("desk");
     });
 
+    bindHubTestFields(["hubUrl", "hubSecret"], "btnTestHub");
+    if ($("btnTestHub")) $("btnTestHub").addEventListener("click", function () { runHubTest("btnTestHub"); });
     if ($("btnSaveHub")) $("btnSaveHub").addEventListener("click", function () {
       const settings = Object.assign({}, CJRM.getState().settings, {
         hubUrl: $("hubUrl").value.trim(),

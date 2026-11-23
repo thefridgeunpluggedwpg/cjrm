@@ -799,6 +799,25 @@ body.is-selecting .swipe-item > .bubble { padding-left: 2.4rem; }
   color: var(--danger);
   border: 1px solid #6a3333;
 }
+.btn-hub-test {
+  background: #9e2b2b;
+  color: #fff;
+  border: 0;
+  border-bottom: 3px solid #6a1b1b;
+  width: 100%;
+}
+.btn-hub-test:active { transform: translateY(1px); border-bottom-width: 2px; }
+.btn-hub-test.is-connected {
+  background: #afcbb5;
+  color: #171c1b;
+  border-bottom: 3px solid #5e7c66;
+}
+.btn-hub-test .hub-check {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+}
+.btn-hub-test:disabled { opacity: 0.7; }
 .wide { width: 100%; }
 
 .file {
@@ -951,7 +970,7 @@ input.field, select.field, textarea.field {
 }
 .onboard .why { margin: 0; color: var(--ink); }
 .onboard .lede { margin: 0; }
-.onboard .btn, .onboard .btn-secondary, .onboard .btn-ghost { width: 100%; }
+.onboard .btn, .onboard .btn-secondary, .onboard .btn-ghost, .onboard .btn-hub-test { width: 100%; }
 .onboard .btn[disabled] { opacity: 0.45; }
 .perm-status {
   margin: 0;
