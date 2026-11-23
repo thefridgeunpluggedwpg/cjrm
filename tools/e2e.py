@@ -1,4 +1,4 @@
-"""CJRM v1.1.4 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.5 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -45,6 +45,74 @@ def start_server(port):
     return httpd_local
 
 
+def hold_then_move(page, x, y, dx, dy, hold_ms=550, steps=12):
+    """Press, hold still long enough to arm, then move."""
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.wait_for_timeout(hold_ms)
+    page.mouse.move(x + dx, y + dy, steps=steps)
+    page.mouse.up()
+
+
+def swipe_no_hold(page, x, y, dx, dy, steps=10):
+    """Immediate swipe with no press-and-hold."""
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx, y + dy, steps=steps)
+    page.mouse.up()
+
+
+def hold_no_swipe(page, x, y, hold_ms=650):
+    """Press and hold still, then release without a swipe."""
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.wait_for_timeout(hold_ms)
+    page.mouse.up()
+
+
+def touch_hold_then_move(page, x, y, dx, dy, hold_ms=550, steps=16):
+    """Touch press, hold to arm, then move — used so vertical pans can scroll."""
+    session = page.context.new_cdp_session(page)
+    session.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y, "id": 0}]})
+    page.wait_for_timeout(hold_ms)
+    for i in range(1, steps + 1):
+        session.send("Input.dispatchTouchEvent", {
+            "type": "touchMove",
+            "touchPoints": [{"x": x + dx * i / steps, "y": y + dy * i / steps, "id": 0}],
+        })
+        page.wait_for_timeout(16)
+    session.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+
+
+
+def scroll_clear_of_chrome(page, selector_text, attr="data-person-swipe"):
+    """Scroll a desk card into the space between the header and the tab bar."""
+    page.evaluate("""(([text, attr]) => {
+      const item = [...document.querySelectorAll('[' + attr + ']')].find((el) => el.textContent.includes(text));
+      if (!item) return;
+      function scroller(node) {
+        let n = node.parentElement;
+        while (n && n !== document.body && n !== document.documentElement) {
+          const oy = getComputedStyle(n).overflowY;
+          if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') && n.scrollHeight > n.clientHeight + 1) return n;
+          n = n.parentElement;
+        }
+        return document.querySelector('main#view') || document.scrollingElement;
+      }
+      const box = scroller(item);
+      item.scrollIntoView({block: 'center', inline: 'nearest'});
+      const tab = document.querySelector('.tabbar');
+      const header = document.querySelector('.app-header');
+      const tabTop = tab ? tab.getBoundingClientRect().top : window.innerHeight;
+      const headBottom = header ? header.getBoundingClientRect().bottom : 0;
+      const r = item.getBoundingClientRect();
+      const mid = (r.top + r.bottom) / 2;
+      const target = (headBottom + 16 + tabTop - 16) / 2;
+      if (Math.abs(mid - target) > 12) box.scrollTop += mid - target;
+    })""", [selector_text, attr])
+    page.wait_for_timeout(150)
+
+
 def main():
     global httpd
     url = os.environ.get("CJRM_URL")
@@ -58,7 +126,7 @@ def main():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path="/usr/bin/google-chrome", args=["--no-sandbox"])
-        ctx = browser.new_context(viewport={"width": 390, "height": 844}, accept_downloads=True, service_workers="block")
+        ctx = browser.new_context(viewport={"width": 390, "height": 844}, accept_downloads=True, service_workers="block", has_touch=True)
         page = ctx.new_page()
         errs = []
         page.on("pageerror", lambda e: errs.append(str(e)))
@@ -72,7 +140,7 @@ def main():
         page.wait_for_selector("#pinnedLabel")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.4")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.5")
         check("demo banner is visible on first load", "Demo data" in page.inner_text("#demoBanner") and page.is_visible("#demoBanner"))
         check("demo banner says fictional / not real", "fictional" in page.inner_text("#demoBanner").lower() and "not real" in page.inner_text("#demoBanner").lower())
         check("privacy: data stays on the device is described in More later or header area", True)
@@ -628,28 +696,94 @@ def main():
         page.screenshot(path=person_shot, full_page=False)
         check("person screenshot written at 412x915", os.path.isfile(person_shot), person_shot)
 
-        # Swipe-to-delete any thread message (a note we add), then long-press delete any desk card.
+        # Delete gesture: hold, then left swipe, on any thread message and any desk card.
         page.evaluate("""() => {
           const k = CJRM.getState().people.find((p) => p.name === 'Kyler Kuehl');
+          for (let i = 0; i < 12; i++) {
+            CJRM.addMessage(k.id, { direction: 'note', channel: 'email', body: 'Scroll filler ' + i });
+          }
           CJRM.addMessage(k.id, { direction: 'note', channel: 'email', body: 'Disposable note to delete.' });
           CJRM.setView('person', k.id);
         }""")
         page.wait_for_selector("#thread [data-msg-swipe]")
-        note = page.locator("#thread [data-msg-swipe]").last
+        page.evaluate("""() => {
+          const note = [...document.querySelectorAll('#thread [data-msg-swipe]')].find((el) => /Disposable note to delete/.test(el.textContent));
+          if (note) note.scrollIntoView({block: 'center', inline: 'nearest'});
+        }""")
+        page.wait_for_timeout(150)
+        note = page.locator("#thread [data-msg-swipe]").filter(has_text="Disposable note to delete.")
         box = note.bounding_box()
-        sx = box["x"] + box["width"] - 16
+        sx = box["x"] + box["width"] / 2
         sy = box["y"] + box["height"] / 2
-        page.mouse.move(sx, sy)
-        page.mouse.down()
-        page.mouse.move(sx - 100, sy, steps=10)
-        page.mouse.up()
+
+        swipe_no_hold(page, sx, sy, -120, 0)
         page.wait_for_timeout(200)
-        check("swipe reveals delete on a thread note", note.locator("[data-del-msg]").count() == 1)
+        opened = page.evaluate("() => !!document.querySelector('#thread .swipe-item.is-open')")
+        still_note = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
+        check("swipe without hold does not reveal delete or delete a message", opened is False and still_note is True, {"opened": opened, "still": still_note})
+
+        hold_no_swipe(page, sx, sy)
+        page.wait_for_timeout(200)
+        opened = page.evaluate("() => !!document.querySelector('#thread .swipe-item.is-open')")
+        still_note = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
+        check("hold without swipe does not reveal delete or delete a message", opened is False and still_note is True, {"opened": opened, "still": still_note})
+
+        scroll_before = page.evaluate("""() => {
+          const t = document.querySelector('#thread');
+          if (t.scrollHeight <= t.clientHeight + 8) {
+            t.style.maxHeight = '240px';
+            t.style.overflowY = 'auto';
+          }
+          const range = Math.max(0, t.scrollHeight - t.clientHeight);
+          t.scrollTop = range > 40 ? Math.min(80, range) : 0;
+          const items = [...t.querySelectorAll('[data-msg-swipe]')];
+          const tr = t.getBoundingClientRect();
+          const mid = items.find((el) => {
+            const r = el.getBoundingClientRect();
+            return r.top > tr.top + 24 && r.bottom < tr.bottom - 24 && !/Disposable note to delete/.test(el.textContent);
+          }) || items[Math.max(0, Math.floor(items.length / 2))];
+          const r = mid.getBoundingClientRect();
+          return {
+            x: r.x + r.width / 2,
+            y: r.y + r.height / 2,
+            scroll: t.scrollTop,
+            win: window.scrollY,
+            can: t.scrollHeight - t.clientHeight,
+            th: t.clientHeight,
+            sh: t.scrollHeight,
+          };
+        }""")
+        dy = -160 if scroll_before.get("scroll", 0) > 20 else 160
+        hold_then_move(page, scroll_before["x"], scroll_before["y"], 0, dy)
+        page.wait_for_timeout(250)
+        scroll_after = page.evaluate("""() => ({
+          scroll: document.querySelector('#thread').scrollTop,
+          win: window.scrollY,
+          opened: !!document.querySelector('#thread .swipe-item.is-open'),
+        })""")
+        moved = abs(scroll_after.get("scroll", 0) - scroll_before.get("scroll", 0)) > 8 or abs(scroll_after.get("win", 0) - scroll_before.get("win", 0)) > 8
+        check(
+            "vertical swipe after hold scrolls the thread and does not reveal delete",
+            moved and scroll_after.get("opened") is False,
+            {"before": scroll_before, "after": scroll_after, "dy": dy},
+        )
+
+        page.evaluate("""() => {
+          const note = [...document.querySelectorAll('#thread [data-msg-swipe]')].find((el) => /Disposable note to delete/.test(el.textContent));
+          if (note) note.scrollIntoView({block: 'center', inline: 'nearest'});
+        }""")
+        page.wait_for_timeout(150)
+        box = note.bounding_box()
+        sx = box["x"] + box["width"] / 2
+        sy = box["y"] + box["height"] / 2
+        hold_then_move(page, sx, sy, -120, 0)
+        page.wait_for_timeout(250)
+        check("hold + left swipe reveals delete on a thread note", note.locator("[data-del-msg]").count() == 1 and "is-open" in (note.get_attribute("class") or ""))
         page.once("dialog", lambda d: d.accept())
         note.locator("[data-del-msg]").click()
         page.wait_for_timeout(200)
         gone = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
-        check("swipe delete removes any thread message, including a note", gone is False, gone)
+        check("hold + left swipe delete removes any thread message, including a note", gone is False, gone)
 
         types = page.evaluate("""() => {
           const p = CJRM.newPerson({ name: 'Temp Types', channel: 'email' }, 'Inbound text body');
@@ -672,35 +806,50 @@ def main():
           window.__delId = id;
         }""", [types["id"]])
         page.wait_for_selector("[data-person-swipe]")
+        scroll_clear_of_chrome(page, "Temp Types")
         temp = page.locator("[data-person-swipe]").filter(has_text="Temp Types")
         tbox = temp.bounding_box()
-        page.mouse.move(tbox["x"] + tbox["width"] / 2, tbox["y"] + tbox["height"] / 2)
-        page.mouse.down()
-        page.wait_for_timeout(650)
-        page.mouse.up()
+        tx = tbox["x"] + tbox["width"] / 2
+        ty = tbox["y"] + tbox["height"] / 2
+        swipe_no_hold(page, tx, ty, -120, 0)
         page.wait_for_timeout(200)
-        check("long-press reveals delete on any desk card", temp.locator("[data-del-person]").count() == 1)
-        page.evaluate("""() => {
-          const item = [...document.querySelectorAll('[data-person-swipe]')].find((el) => el.textContent.includes('Temp Types'));
-          if (item) item.scrollIntoView({block: 'center', inline: 'nearest'});
-        }""")
-        page.wait_for_timeout(150)
-        page.once("dialog", lambda d: d.accept())
-        page.evaluate("""() => {
-          const item = [...document.querySelectorAll('[data-person-swipe]')].find((el) => el.textContent.includes('Temp Types'));
-          const btn = item && item.querySelector('[data-del-person]');
-          if (btn) btn.click();
-        }""")
+        opened = page.evaluate("() => [...document.querySelectorAll('[data-person-swipe]')].some((el) => el.textContent.includes('Temp Types') && el.classList.contains('is-open'))")
+        check("swipe without hold does not reveal delete on a desk card", opened is False, opened)
+        scroll_clear_of_chrome(page, "Temp Types")
+        tbox = temp.bounding_box()
+        tx = tbox["x"] + tbox["width"] / 2
+        ty = tbox["y"] + tbox["height"] / 2
+        hold_no_swipe(page, tx, ty)
         page.wait_for_timeout(200)
+        opened = page.evaluate("() => [...document.querySelectorAll('[data-person-swipe]')].some((el) => el.textContent.includes('Temp Types') && el.classList.contains('is-open'))")
+        check("hold without swipe does not reveal delete on a desk card", opened is False, opened)
+        page.evaluate("() => { CJRM.setView('desk'); }")
+        page.wait_for_selector("[data-person-swipe]")
+        scroll_clear_of_chrome(page, "Temp Types")
+        tbox = temp.bounding_box()
+        tx = tbox["x"] + tbox["width"] / 2
+        ty = tbox["y"] + tbox["height"] / 2
+        hold_then_move(page, tx, ty, -120, 0)
+        page.wait_for_timeout(250)
+        opened = page.evaluate("() => [...document.querySelectorAll('[data-person-swipe]')].some((el) => el.textContent.includes('Temp Types') && el.classList.contains('is-open'))")
+        check("hold + left swipe reveals delete on any desk card", opened is True, opened)
+        if opened:
+            page.once("dialog", lambda d: d.accept())
+            page.evaluate("""() => {
+              const item = [...document.querySelectorAll('[data-person-swipe]')].find((el) => el.textContent.includes('Temp Types'));
+              const btn = item && item.querySelector('[data-del-person]');
+              if (btn) btn.click();
+            }""")
+            page.wait_for_timeout(200)
         still = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
-        check("long-press delete removes any desk card, not just junk", still is False, still)
+        check("hold + left swipe delete removes any desk card, not just junk", still is False, still)
 
         page.set_viewport_size({"width": 390, "height": 844})
 
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.4", "Version 1.1.4" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.5", "Version 1.1.5" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)

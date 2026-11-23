@@ -637,22 +637,48 @@
 
   function bindSwipeAndLongPress(el, onDelete) {
     const handle = el.querySelector("[data-open], .bubble") || el;
-    let startX = 0, startY = 0, tracking = false, longTimer = null, gesturing = false, lastOpened = false;
+    const HOLD_MS = 500;
+    const MOVE_CANCEL = 10;
+    const SWIPE_DX = -60;
+    let startX = 0, startY = 0, tracking = false, longTimer = null;
+    let armed = false, cancelled = false, gesturing = false, lastOpened = false, capturedId = null, suppressClick = false;
+    let verticalScroll = false, scrollTarget = null, lastY = 0;
 
     function clearTimer() {
       if (longTimer) { clearTimeout(longTimer); longTimer = null; }
     }
 
-    function armLongPress() {
+    function resetTransform() {
+      handle.style.transition = "";
+      handle.style.transform = "";
+    }
+
+    function releaseCapture() {
+      if (capturedId == null) return;
+      try { handle.releasePointerCapture(capturedId); } catch (err) {}
+      capturedId = null;
+    }
+
+    function scrollParentOf(node) {
+      let n = node;
+      while (n && n !== document.body && n !== document.documentElement) {
+        const style = window.getComputedStyle(n);
+        const oy = style.overflowY;
+        if ((oy === "auto" || oy === "scroll" || oy === "overlay") && n.scrollHeight > n.clientHeight + 1) return n;
+        n = n.parentElement;
+      }
+      return document.scrollingElement || document.documentElement;
+    }
+
+    function cancelArm() {
       clearTimer();
-      longTimer = setTimeout(function () {
-        longTimer = null;
-        gesturing = true;
-        closeOpenSwipes(el);
-        el.classList.add("is-open");
-        if (navigator.vibrate) navigator.vibrate(12);
-        handle.style.transform = "";
-      }, 520);
+      armed = false;
+      cancelled = true;
+      releaseCapture();
+      if (!lastOpened) {
+        el.classList.remove("is-open");
+        resetTransform();
+      }
     }
 
     handle.addEventListener("pointerdown", function (e) {
@@ -660,55 +686,97 @@
       startX = e.clientX;
       startY = e.clientY;
       tracking = true;
+      armed = false;
+      cancelled = false;
       gesturing = false;
+      suppressClick = false;
+      verticalScroll = false;
+      scrollTarget = null;
+      lastY = e.clientY;
       lastOpened = el.classList.contains("is-open");
-      try { handle.setPointerCapture(e.pointerId); } catch (err) {}
-      armLongPress();
+      clearTimer();
+      longTimer = setTimeout(function () {
+        longTimer = null;
+        if (!tracking || cancelled) return;
+        armed = true;
+        if (navigator.vibrate) navigator.vibrate(12);
+      }, HOLD_MS);
     });
     handle.addEventListener("pointermove", function (e) {
       if (!tracking) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimer();
-      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+      // After a hold, the browser often will not start a native pan. Keep scrolling
+      // the nearest overflow container so a vertical move never sticks or arms delete.
+      if (verticalScroll && scrollTarget) {
+        scrollTarget.scrollTop += lastY - e.clientY;
+        lastY = e.clientY;
+        return;
+      }
+      if (cancelled) return;
+      if (!armed) {
+        if (adx > MOVE_CANCEL || ady > MOVE_CANCEL) {
+          suppressClick = true;
+          cancelArm();
+        }
+        return;
+      }
+      if (ady > MOVE_CANCEL && ady >= adx) {
+        suppressClick = true;
+        verticalScroll = true;
+        lastY = e.clientY;
+        scrollTarget = scrollParentOf(el);
+        cancelArm();
+        if (scrollTarget) scrollTarget.scrollTop += -dy;
+        return;
+      }
+      if (adx > 2 * ady && dx < 0) {
         gesturing = true;
+        suppressClick = true;
+        if (capturedId == null) {
+          try { handle.setPointerCapture(e.pointerId); capturedId = e.pointerId; } catch (err) {}
+        }
+        if (e.cancelable) e.preventDefault();
         closeOpenSwipes(el);
         const shift = Math.max(-88, Math.min(0, lastOpened ? dx - 88 : dx));
-        const target = handle;
-        target.style.transition = "none";
-        target.style.transform = "translateX(" + shift + "px)";
-        if (shift < -48) el.classList.add("is-open");
-        else el.classList.remove("is-open");
+        handle.style.transition = "none";
+        handle.style.transform = "translateX(" + shift + "px)";
+        if (dx < SWIPE_DX && adx > 2 * ady) el.classList.add("is-open");
+        else if (!lastOpened) el.classList.remove("is-open");
       }
-    });
+    }, { passive: false });
     function endPointer(e) {
       if (!tracking) return;
       tracking = false;
       clearTimer();
-      const target = handle;
-      target.style.transition = "";
       const dx = e && e.clientX != null ? e.clientX - startX : 0;
-      if (dx < -64) {
+      const dy = e && e.clientY != null ? e.clientY - startY : 0;
+      const held = armed && !cancelled;
+      const reveal = held && dx < SWIPE_DX && Math.abs(dx) > 2 * Math.abs(dy);
+      releaseCapture();
+      handle.style.transition = "";
+      handle.style.transform = "";
+      if (reveal) {
         gesturing = true;
+        suppressClick = true;
         el.classList.add("is-open");
-        target.style.transform = "";
-      } else if (dx > 24) {
+      } else if (!lastOpened) {
         el.classList.remove("is-open");
-        target.style.transform = "";
-      } else if (!el.classList.contains("is-open")) {
-        target.style.transform = "";
-      } else {
-        target.style.transform = "";
       }
+      // A completed hold is not a tap, so the desk card does not open.
+      if (held) suppressClick = true;
+      armed = false;
     }
     handle.addEventListener("pointerup", endPointer);
     handle.addEventListener("pointercancel", endPointer);
     handle.addEventListener("click", function (e) {
-      if (gesturing || el.classList.contains("is-open") || lastOpened) {
+      if (gesturing || suppressClick || el.classList.contains("is-open") || lastOpened) {
         e.preventDefault();
         e.stopPropagation();
         if (lastOpened && !gesturing) el.classList.remove("is-open");
         gesturing = false;
+        suppressClick = false;
       }
     }, true);
   }

@@ -209,6 +209,8 @@ main#view {
   margin: 0 auto;
   padding: 0 0 calc(var(--tab-h) + env(safe-area-inset-bottom) + 0.5rem);
   min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 main#view.person-mode {
   display: flex;
@@ -387,6 +389,7 @@ main#view.person-mode .composer { flex: 0 0 auto; }
   max-width: 92%;
   align-self: flex-start;
   border-radius: 12px;
+  flex-shrink: 0;
 }
 .bubble-wrap.out { align-self: flex-end; }
 .bubble-wrap.note { align-self: stretch; max-width: 100%; }
