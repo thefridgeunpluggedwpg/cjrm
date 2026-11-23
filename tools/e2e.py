@@ -1,4 +1,4 @@
-"""CJRM v1.0.0 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.0.1 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -72,7 +72,7 @@ def main():
         page.wait_for_selector("#pinnedLabel")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.0.0")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.0.1")
         check("demo banner is visible on first load", "Demo data" in page.inner_text("#demoBanner") and page.is_visible("#demoBanner"))
         check("demo banner says fictional / not real", "fictional" in page.inner_text("#demoBanner").lower() and "not real" in page.inner_text("#demoBanner").lower())
         check("privacy: data stays on the device is described in More later or header area", True)
@@ -316,7 +316,7 @@ def main():
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.0.0", "Version 1.0.0" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.0.1", "Version 1.0.1" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         with page.expect_download() as dlinfo:
             page.click("#btnExport")
         download = dlinfo.value

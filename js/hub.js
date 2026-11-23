@@ -11,9 +11,8 @@
   async function fetchHub(url, secret) {
     if (!url) throw new Error("Paste the mailbox endpoint URL first.");
     const resolved = hubUrlWithSecret(url, secret);
-    const headers = { Accept: "application/json" };
-    if (secret) headers["X-CJRM-Secret"] = secret;
-    const res = await fetch(resolved, { method: "GET", headers: headers, cache: "no-store" });
+    // Simple GET with no custom headers: Apps Script cannot answer a CORS preflight.
+    const res = await fetch(resolved, { method: "GET", redirect: "follow", cache: "no-store" });
     if (!res.ok) throw new Error("Mailbox returned HTTP " + res.status);
     const data = await res.json();
     if (data && data.ok === false) throw new Error(data.error || "Mailbox rejected the request.");
