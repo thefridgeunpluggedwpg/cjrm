@@ -1,4 +1,4 @@
-"""CJRM v1.1.8 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.9 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -109,6 +109,21 @@ def mock_hub(page, url="https://example.com/cjrm-hub"):
     return url
 
 
+
+def swipe_revealed(page, text, attr="data-msg-swipe"):
+    """Whether a left swipe has revealed the Delete button on an item."""
+    return page.evaluate("""(([text, attr]) => {
+      const el = [...document.querySelectorAll('[' + attr + ']')].find((n) => n.textContent.includes(text));
+      if (!el) return null;
+      const btn = el.querySelector('.btn-swipe-del');
+      return {
+        open: el.classList.contains("is-open"),
+        hasDelete: !!(btn && /delete/i.test(btn.textContent || "")),
+        anyOpen: !!document.querySelector(".swipe-item.is-open"),
+      };
+    })""", [text, attr])
+
+
 def swipe_item(page, box, dx, dy, steps=8):
     x = box["x"] + box["width"] / 2
     y = box["y"] + box["height"] / 2
@@ -170,7 +185,7 @@ def main():
         page.wait_for_function("() => window.CJRM && CJRM.getState && document.querySelector('#onboard')")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.8")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.9")
         fresh = page.evaluate("""() => {
           const s = CJRM.getState();
           const names = (s.people || []).map((p) => p.name);
@@ -888,8 +903,15 @@ def main():
         person_shot = os.path.join(ROOT, "demo", "person-thread-412x915.png")
         page.screenshot(path=person_shot, full_page=False)
         check("person screenshot written at 412x915", os.path.isfile(person_shot), person_shot)
+        person_text = page.inner_text("#view").lower()
+        check("person screen has no quick-reply chips", page.locator("#composer .tpl-row, #composer [data-tpl], .tpl-row").count() == 0)
+        check(
+            "quick-reply titles are not on the person screen",
+            "thanks, i'll reply today" not in person_text and "book a measure" not in person_text,
+            person_text[:200],
+        )
 
-        # Delete gesture: left swipe deletes; hold enters multi-select.
+        # Delete gesture: left swipe reveals Delete to tap; hold enters multi-select.
         page.evaluate("""() => {
           const k = CJRM.getState().people.find((p) => p.name === 'Kyler Kuehl');
           for (let i = 0; i < 12; i++) {
@@ -910,7 +932,8 @@ def main():
         short_dx = -28
         swipe_item(page, box, short_dx, 0)
         still_note = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
-        check("short swipe snaps back and does not delete a message", still_note is True and page.locator("#btnUndoDelete").count() == 0, still_note)
+        short_state = swipe_revealed(page, "Disposable note to delete.", "data-msg-swipe")
+        check("short swipe snaps back and does not delete a message", still_note is True and page.locator("#btnUndoDelete").count() == 0 and short_state and short_state["open"] is False, {"still": still_note, "state": short_state})
 
         scroll_before = page.evaluate("""() => {
           const t = document.querySelector('#thread');
@@ -946,11 +969,12 @@ def main():
           win: window.scrollY,
           undo: !!document.querySelector('#btnUndoDelete'),
           still: CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||'')),
+          open: !!document.querySelector('#thread .swipe-item.is-open'),
         })""")
         moved = abs(scroll_after.get("scroll", 0) - scroll_before.get("scroll", 0)) > 8 or abs(scroll_after.get("win", 0) - scroll_before.get("win", 0)) > 8
         check(
             "vertical swipe never deletes a thread message",
-            moved and scroll_after.get("undo") is False and scroll_after.get("still") is True,
+            moved and scroll_after.get("undo") is False and scroll_after.get("still") is True and scroll_after.get("open") is False,
             {"before": scroll_before, "after": scroll_after, "dy": dy},
         )
 
@@ -961,8 +985,45 @@ def main():
         page.wait_for_timeout(150)
         box = note.bounding_box()
         swipe_item(page, box, -max(int(box["width"] * 0.45), 140), 0)
+        revealed = swipe_revealed(page, "Disposable note to delete.", "data-msg-swipe")
+        still_note = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
+        check(
+            "left swipe reveals Delete without deleting a thread message",
+            still_note is True and page.locator("#btnUndoDelete").count() == 0 and revealed and revealed["open"] is True and revealed["hasDelete"] is True,
+            {"still": still_note, "revealed": revealed},
+        )
+        box = note.bounding_box()
+        swipe_item(page, box, 120, 0)
+        closed_back = swipe_revealed(page, "Disposable note to delete.", "data-msg-swipe")
+        check(
+            "swiping back closes Delete on a thread message",
+            page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))") is True and closed_back and closed_back["open"] is False and closed_back["anyOpen"] is False,
+            closed_back,
+        )
+        box = note.bounding_box()
+        swipe_item(page, box, -max(int(box["width"] * 0.45), 140), 0)
+        page.wait_for_selector("#thread .swipe-item.is-open .btn-swipe-del")
+        thread_box = page.locator("#thread").bounding_box()
+        page.mouse.click(thread_box["x"] + 8, thread_box["y"] + 8)
+        page.wait_for_timeout(200)
+        closed_away = swipe_revealed(page, "Disposable note to delete.", "data-msg-swipe")
+        check(
+            "tapping away closes Delete on a thread message",
+            page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))") is True and closed_away and closed_away["open"] is False and closed_away["anyOpen"] is False,
+            closed_away,
+        )
+        page.evaluate("""() => {
+          const note = [...document.querySelectorAll('#thread [data-msg-swipe]')].find((el) => /Disposable note to delete/.test(el.textContent));
+          if (note) note.scrollIntoView({block: 'center', inline: 'nearest'});
+        }""")
+        page.wait_for_timeout(150)
+        box = note.bounding_box()
+        swipe_item(page, box, -max(int(box["width"] * 0.45), 140), 0)
+        page.wait_for_selector("#thread .swipe-item.is-open .btn-swipe-del")
+        note.locator(".btn-swipe-del").click()
+        page.wait_for_timeout(200)
         gone = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
-        check("left swipe deletes a thread message", gone is False and page.locator("#btnUndoDelete").count() == 1, gone)
+        check("tapping Delete deletes a thread message", gone is False and page.locator("#btnUndoDelete").count() == 1, gone)
         page.click("#btnUndoDelete")
         page.wait_for_timeout(200)
         restored = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
@@ -1058,7 +1119,8 @@ def main():
         tbox = temp.bounding_box()
         swipe_item(page, tbox, -28, 0)
         still = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
-        check("short swipe snaps back and does not delete a desk card", still is True and page.locator("#btnUndoDelete").count() == 0, still)
+        short_card = swipe_revealed(page, "Temp Types", "data-person-swipe")
+        check("short swipe snaps back and does not delete a desk card", still is True and page.locator("#btnUndoDelete").count() == 0 and short_card and short_card["open"] is False, {"still": still, "state": short_card})
 
         page.evaluate("""() => {
           const p = CJRM.newPerson({ name: 'Temp Scroll', channel: 'email' }, 'Just here to make the desk scroll.');
@@ -1073,19 +1135,55 @@ def main():
         desk_vert = page.evaluate("""() => ({
           still: CJRM.getState().people.some((p) => p.name === 'Temp Types'),
           undo: !!document.querySelector('#btnUndoDelete'),
+          open: !!document.querySelector('[data-person-swipe].is-open, .swipe-item.is-open'),
           scroll: (document.querySelector('main#view') || document.scrollingElement).scrollTop,
         })""")
         check(
             "vertical swipe never deletes a desk card",
-            desk_vert["still"] is True and desk_vert["undo"] is False,
+            desk_vert["still"] is True and desk_vert["undo"] is False and desk_vert["open"] is False,
             {"before": desk_scroll_before, "after": desk_vert},
         )
 
         scroll_clear_of_chrome(page, "Temp Types")
-        tbox = page.locator("[data-person-swipe]").filter(has_text="Temp Types").bounding_box()
+        temp = page.locator("[data-person-swipe]").filter(has_text="Temp Types")
+        tbox = temp.bounding_box()
         swipe_item(page, tbox, -max(int(tbox["width"] * 0.45), 140), 0)
+        revealed_card = swipe_revealed(page, "Temp Types", "data-person-swipe")
+        still_card = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
+        check(
+            "left swipe reveals Delete without deleting a desk card",
+            still_card is True and page.locator("#btnUndoDelete").count() == 0 and revealed_card and revealed_card["open"] is True and revealed_card["hasDelete"] is True,
+            {"still": still_card, "revealed": revealed_card},
+        )
+        tbox = temp.bounding_box()
+        swipe_item(page, tbox, 120, 0)
+        closed_card_back = swipe_revealed(page, "Temp Types", "data-person-swipe")
+        check(
+            "swiping back closes Delete on a desk card",
+            page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')") is True and closed_card_back and closed_card_back["open"] is False,
+            closed_card_back,
+        )
+        scroll_clear_of_chrome(page, "Temp Types")
+        tbox = temp.bounding_box()
+        swipe_item(page, tbox, -max(int(tbox["width"] * 0.45), 140), 0)
+        page.wait_for_selector("[data-person-swipe].is-open .btn-swipe-del")
+        page.locator(".app-header").click(position={"x": 8, "y": 8}, force=True)
+        page.wait_for_timeout(200)
+        closed_card_away = swipe_revealed(page, "Temp Types", "data-person-swipe")
+        check(
+            "tapping away closes Delete on a desk card",
+            page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')") is True and closed_card_away and closed_card_away["open"] is False,
+            closed_card_away,
+        )
+        # header click is swallowed while a swipe is open, so we should still be on the desk
+        scroll_clear_of_chrome(page, "Temp Types")
+        tbox = temp.bounding_box()
+        swipe_item(page, tbox, -max(int(tbox["width"] * 0.45), 140), 0)
+        page.wait_for_selector("[data-person-swipe].is-open .btn-swipe-del")
+        temp.locator(".btn-swipe-del").click()
+        page.wait_for_timeout(200)
         gone_card = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
-        check("left swipe deletes a desk card", gone_card is False and page.locator("#btnUndoDelete").count() == 1, gone_card)
+        check("tapping Delete deletes a desk card", gone_card is False and page.locator("#btnUndoDelete").count() == 1, gone_card)
         page.click("#btnUndoDelete")
         page.wait_for_timeout(200)
         check("Undo restores a swipe-deleted desk card", page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')") is True)
@@ -1134,7 +1232,7 @@ def main():
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.8", "Version 1.1.8" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.9", "Version 1.1.9" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)

@@ -2,12 +2,13 @@
 
 ## Gestures
 
-A mostly-horizontal left swipe on any Desk card or thread message (texts, emails, notes, and every other message) deletes it immediately: no hold and no confirm. The item slides off, and a 5-second Undo toast appears. Deleted mailbox `sourceId`s stay in `seenHubIds` so they do not come back from the mailbox.
+A mostly-horizontal left swipe on any Desk card or thread message (texts, emails, notes, and every other message) slides the item to reveal a red Delete button. Deletion happens only when that button is tapped. A 5-second Undo toast appears after deletion. Deleted mailbox `sourceId`s stay in `seenHubIds` so they do not come back from the mailbox.
 
-- Delete when `|dx| > 2 * |dy|` and the swipe goes past about 35% of the item width, or on a fast leftward fling.
-- A short or cancelled swipe snaps back and does not delete.
-- If vertical movement dominates at any point, cancel the swipe and let the list scroll normally (`touch-action: pan-y`).
-- A still press-and-hold of about 500ms (under ~10px of movement) enters multi-select and selects that item (checkmark, highlight, light vibration). Further taps toggle more items. A top bar shows “N selected”, Select all, Delete (same Undo toast), and Cancel (X). The back button also exits. Swipe-delete is disabled while multi-select is on.
+- Reveal Delete when `|dx| > 2 * |dy|` and the swipe goes far enough to show the button, or on a fast leftward fling. No hold is required.
+- Tapping Delete removes the item. Tapping elsewhere, scrolling, or swiping back closes the button without deleting.
+- A short or cancelled swipe snaps back and does not reveal Delete.
+- If vertical movement dominates at any point, cancel the swipe, close any open Delete button, and let the list scroll normally (`touch-action: pan-y`).
+- A still press-and-hold of about 500ms (under ~10px of movement) enters multi-select and selects that item (checkmark, highlight, light vibration). Further taps toggle more items. A top bar shows “N selected”, Select all, Delete (same Undo toast), and Cancel (X). The back button also exits. Swipe-to-reveal is disabled while multi-select is on.
 
 ## Onboarding
 

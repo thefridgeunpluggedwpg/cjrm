@@ -126,6 +126,7 @@
   }
 
   function enterSelect(kind, id) {
+    closeOpenSwipes(null);
     ui.selecting = kind;
     ui.selected = {};
     if (id) ui.selected[id] = true;
@@ -512,6 +513,7 @@
       const showSubject = subject && subject.toLowerCase() !== String(p.name || "").toLowerCase();
       const selected = ui.selecting === "desk" && ui.selected[p.id] ? " is-selected" : "";
       return '<li class="swipe-item' + selected + '" data-person-swipe="' + esc(p.id) + '">' +
+        '<div class="swipe-actions"><button type="button" class="btn-swipe-del" data-del-person="' + esc(p.id) + '">Delete</button></div>' +
         '<button type="button" class="' + cls + '" data-open="' + esc(p.id) + '">' +
         '<span class="select-check" aria-hidden="true"></span>' +
         '<span class="' + badgeClass(badgeChannel) + '">' + esc(badgeLabel) + "</span>" +
@@ -634,14 +636,11 @@
       const who = m.direction === "note" ? "Note" : (m.direction === "out" ? "You" : (person.name || "Them")) + " · " + (CJRM.sourceLabel ? CJRM.sourceLabel(m.channel) : (meta.name || ""));
       const selected = ui.selecting === "thread" && ui.selected[m.id] ? " is-selected" : "";
       return '<div class="swipe-item bubble-wrap ' + m.direction + selected + '" data-msg-swipe="' + esc(m.id) + '">' +
+        '<div class="swipe-actions"><button type="button" class="btn-swipe-del" data-del-msg="' + esc(m.id) + '">Delete</button></div>' +
         '<span class="select-check" aria-hidden="true"></span>' +
         '<article class="bubble ' + m.direction + '"><p class="who">' + esc(who) + "</p><p>" + esc(m.body) +
         "</p><time datetime=\"" + esc(m.at) + '">' + esc(CJRM.formatWhen(m.at)) + "</time></article></div>";
     }).join("") || "<p class='lede'>No messages yet. Log a call or write a reply below.</p>";
-
-    const templates = (state.templates || []).map(function (t) {
-      return '<button type="button" class="chip" data-tpl="' + esc(t.id) + '">' + esc(t.title) + "</button>";
-    }).join("");
 
     const channelOpts = (CJRM.CHANNELS || []).map(function (c) {
       const sel = c === person.channel ? " selected" : "";
@@ -651,7 +650,6 @@
     const actionsHidden = ui.replyOpen ? "" : " hidden";
     return head + '<div class="thread" id="thread">' + bubbles + "</div>" +
       '<div class="composer' + (ui.replyOpen ? " is-open" : "") + '" id="composer">' +
-      (templates ? '<div class="tpl-row">' + templates + "</div>" : "") +
       '<div class="composer-bar">' +
       '<label class="visually-hidden" for="replyBody">Write a reply</label>' +
       '<textarea id="replyBody" rows="1" placeholder="Write a reply"></textarea>' +
@@ -926,6 +924,8 @@
     });
   }
 
+  let ignoreTapClose = false;
+
   function closeOpenSwipes(except) {
     document.querySelectorAll(".swipe-item.is-open").forEach(function (el) {
       if (el !== except) el.classList.remove("is-open");
@@ -961,28 +961,37 @@
       return document.querySelector("main#view") || document.scrollingElement || document.documentElement;
     }
 
+    function actionWidth() {
+      const actions = el.querySelector(".swipe-actions");
+      const w = actions ? actions.getBoundingClientRect().width : 0;
+      return w || 88;
+    }
+
     function snapBack() {
       handle.style.transition = "";
       handle.style.transform = "";
       handle.style.opacity = "";
     }
 
-    function commitSwipe() {
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      function go() {
-        if (kind === "desk") deletePeopleWithUndo([id]);
-        else deleteMessagesWithUndo([id]);
-      }
-      if (reduce) { go(); return; }
-      handle.style.transition = "transform 0.2s ease-out, opacity 0.2s ease-out";
-      handle.style.transform = "translateX(-110%)";
-      handle.style.opacity = "0";
-      el.classList.add("is-dismissing");
-      setTimeout(go, 200);
+    function openSwipe() {
+      closeOpenSwipes(el);
+      snapBack();
+      el.classList.add("is-open");
     }
+
+    function closeThis() {
+      el.classList.remove("is-open");
+      snapBack();
+    }
+
+    let startOpen = false;
+    let startOffset = 0;
 
     handle.addEventListener("pointerdown", function (e) {
       if (e.pointerType === "mouse" && e.button !== 0) return;
+      closeOpenSwipes(el);
+      startOpen = el.classList.contains("is-open");
+      startOffset = startOpen ? -actionWidth() : 0;
       startX = lastX = e.clientX;
       startY = e.clientY;
       startT = lastT = (typeof performance !== "undefined" ? performance.now() : Date.now());
@@ -1033,20 +1042,24 @@
         lastY = e.clientY;
         scrollTarget = scrollParentOf(el);
         releaseCapture();
-        snapBack();
+        closeThis();
         if (scrollTarget) scrollTarget.scrollTop += -dy;
         return;
       }
       if (ui.selecting) return;
-      if (adx > 2 * ady && dx < 0) {
-        gesturing = true;
-        suppressClick = true;
-        if (capturedId == null) {
-          try { handle.setPointerCapture(e.pointerId); capturedId = e.pointerId; } catch (err) {}
+      if (adx > 2 * ady) {
+        const width = actionWidth();
+        const x = Math.min(0, Math.max(-width, startOffset + dx));
+        if (x < 0 || startOpen) {
+          gesturing = true;
+          suppressClick = true;
+          if (capturedId == null) {
+            try { handle.setPointerCapture(e.pointerId); capturedId = e.pointerId; } catch (err) {}
+          }
+          if (e.cancelable) e.preventDefault();
+          handle.style.transition = "none";
+          handle.style.transform = "translateX(" + x + "px)";
         }
-        if (e.cancelable) e.preventDefault();
-        handle.style.transition = "none";
-        handle.style.transform = "translateX(" + Math.max(-el.getBoundingClientRect().width, dx) + "px)";
       }
     }, { passive: false });
     function endPointer(e) {
@@ -1057,17 +1070,24 @@
       const dx = e && e.clientX != null ? e.clientX - startX : 0;
       const dy = e && e.clientY != null ? e.clientY - startY : 0;
       const adx = Math.abs(dx), ady = Math.abs(dy);
-      const width = el.getBoundingClientRect().width || 1;
-      const horizontal = adx > 2 * ady && dx < 0;
-      const farEnough = dx <= -0.35 * width;
-      const fling = lastVX < -0.65 && adx > 20;
-      if (!ui.selecting && !verticalScroll && horizontal && (farEnough || fling)) {
-        suppressClick = true;
-        gesturing = true;
-        commitSwipe();
+      const width = actionWidth();
+      const x = Math.min(0, Math.max(-width, startOffset + dx));
+      const horizontal = adx > 2 * ady;
+      const flingLeft = lastVX < -0.65 && adx > 20;
+      const flingRight = lastVX > 0.65 && adx > 20;
+      if (ui.selecting || verticalScroll) {
+        closeThis();
         return;
       }
-      snapBack();
+      if (horizontal && !flingRight && (x <= -0.45 * width || flingLeft)) {
+        suppressClick = true;
+        gesturing = true;
+        ignoreTapClose = true;
+        openSwipe();
+        return;
+      }
+      if (gesturing || startOpen) ignoreTapClose = true;
+      closeThis();
     }
     handle.addEventListener("contextmenu", function (e) { e.preventDefault(); });
     el.addEventListener("contextmenu", function (e) { e.preventDefault(); });
@@ -1079,6 +1099,12 @@
         e.stopPropagation();
         gesturing = false;
         suppressClick = false;
+        return;
+      }
+      if (el.classList.contains("is-open")) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeThis();
         return;
       }
       if (ui.selecting) {
@@ -1151,6 +1177,20 @@
   function bind() {
     const view = $("view");
     bindItemGesturesAll(view);
+    view.querySelectorAll("[data-del-person]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        deletePeopleWithUndo([btn.getAttribute("data-del-person")]);
+      });
+    });
+    view.querySelectorAll("[data-del-msg]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteMessagesWithUndo([btn.getAttribute("data-del-msg")]);
+      });
+    });
     bindComposer();
     if (ui.view === "onboard") bindOnboard();
 
@@ -1178,6 +1218,12 @@
       btn.addEventListener("click", function (e) {
         if (ui.selecting) {
           e.preventDefault();
+          return;
+        }
+        const row = btn.closest(".swipe-item");
+        if (row && row.classList.contains("is-open")) {
+          e.preventDefault();
+          closeOpenSwipes(null);
           return;
         }
         const id = btn.getAttribute("data-open");
@@ -1522,6 +1568,25 @@
       ui.hideDemoBanner = true;
       $("demoBanner").hidden = true;
     });
+    document.addEventListener("click", function (e) {
+      if (ignoreTapClose) {
+        ignoreTapClose = false;
+        if (e.target && e.target.closest && e.target.closest(".swipe-item")) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+      const open = document.querySelector(".swipe-item.is-open");
+      if (!open) return;
+      if (e.target && e.target.closest && e.target.closest(".btn-swipe-del")) return;
+      closeOpenSwipes(null);
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+    document.addEventListener("scroll", function () {
+      if (document.querySelector(".swipe-item.is-open")) closeOpenSwipes(null);
+    }, true);
     document.addEventListener("contextmenu", function (e) {
       const node = e.target && e.target.closest ? e.target.closest("input, textarea, [contenteditable], [contenteditable='true']") : null;
       if (node) return;

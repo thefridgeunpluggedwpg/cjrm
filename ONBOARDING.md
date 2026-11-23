@@ -21,9 +21,9 @@ On the Android phone:
    - Step 2 is **Connect your email**. Paste the mailbox hub URL and the same secret you set in the Apps Script. Tap **Test connection**. Wait for the green **Mailbox connected** line, then tap **Open the desk**.
 5. The desk should say **Waiting for your first message**.
 
-To confirm the version after setup, open **More**. It should say **Version 1.1.8**.
+To confirm the version after setup, open **More**. It should say **Version 1.1.9**.
 
-If you are using the Android app file (CJRM-v1.1.8.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
+If you are using the Android app file (CJRM-v1.1.9.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
 
 
 ## 2. Install the mailbox hub (Google Apps Script)
@@ -66,9 +66,9 @@ WhatsApp notices work the same way if he forwards them, or he can log them by ha
 ## 4. Daily use
 
 - The home screen is one vertical list. Anything unanswered for two hours, or with a follow-up due, pins at the top with a timer.
-- To remove a person from the Desk, or any message in a thread, swipe left. A toast lets you **Undo** for five seconds. Press and hold to select several, then **Delete**.
+- To remove a person from the Desk, or any message in a thread, swipe left to reveal **Delete**, then tap it. A toast lets you **Undo** for five seconds. Swipe back or tap elsewhere to close the button without deleting. Press and hold to select several, then **Delete**.
 - Open a person to see the whole thread across every channel. The **File** tab holds the stage (New lead → Contacted → Quote sent → Booked → Done / Lost), notes, photos, and the +2 days follow-up chip.
-- Quick replies live on the thread. **Copy reply**, then paste into Kijiji, Messenger, or Messages. **Open in app** starts a call, SMS, WhatsApp, Messenger, or Instagram thread when a number or handle is on file. **Log as sent** keeps the desk in sync.
+- Open a person to write a reply. **Copy reply**, then paste into Kijiji, Messenger, or Messages. **Open in app** starts a call, SMS, WhatsApp, Messenger, or Instagram thread when a number or handle is on file. **Log as sent** keeps the desk in sync.
 - **Add** is for a new lead or a pasted mailbox batch. **More** is for the hub, templates, and backup.
 - Export a backup from **More** every so often and keep the file somewhere safe. Import replaces the desk on that phone.
 
