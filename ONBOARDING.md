@@ -6,11 +6,9 @@ Do this on Johnny's Android phone and in his own Google account. Do not put real
 
 ## 1. Install the app
 
-GitHub Pages is not enabled yet. When it is, the public link will be:
+The app is live at:
 
 `https://thefridgeunpluggedwpg.github.io/cjrm/`
-
-Until then, you can open a local copy or any private preview you host.
 
 On the Android phone:
 
