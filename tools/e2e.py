@@ -1,4 +1,4 @@
-"""CJRM v1.1.5 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.6 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -85,6 +85,23 @@ def touch_hold_then_move(page, x, y, dx, dy, hold_ms=550, steps=16):
 
 
 
+
+def mock_hub(page, url="https://example.com/cjrm-hub"):
+    page.route("https://example.com/cjrm-hub**", lambda route: route.fulfill(
+        status=200,
+        content_type="application/json",
+        body='{"ok":true,"messages":[]}',
+    ))
+    return url
+
+
+def swipe_item(page, box, dx, dy, steps=8):
+    x = box["x"] + box["width"] / 2
+    y = box["y"] + box["height"] / 2
+    swipe_no_hold(page, x, y, dx, dy, steps=steps)
+    page.wait_for_timeout(450)
+
+
 def scroll_clear_of_chrome(page, selector_text, attr="data-person-swipe"):
     """Scroll a desk card into the space between the header and the tab bar."""
     page.evaluate("""(([text, attr]) => {
@@ -136,14 +153,106 @@ def main():
         page.wait_for_function("() => window.CJRM && CJRM.VERSION && document.querySelector('#view')")
         page.evaluate("() => { localStorage.clear(); }")
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_function("() => window.CJRM && CJRM.getState && CJRM.getState().people.length > 0")
-        page.wait_for_selector("#pinnedLabel")
+        page.wait_for_function("() => window.CJRM && CJRM.getState && document.querySelector('#onboard')")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.5")
-        check("demo banner is visible on first load", "Demo data" in page.inner_text("#demoBanner") and page.is_visible("#demoBanner"))
-        check("demo banner says fictional / not real", "fictional" in page.inner_text("#demoBanner").lower() and "not real" in page.inner_text("#demoBanner").lower())
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.6")
+        fresh = page.evaluate("""() => {
+          const s = CJRM.getState();
+          const names = (s.people || []).map((p) => p.name);
+          const banned = ["Jules","Casey","Priya","Mara","Owen","Devon","Amira","Samir","Ruth","Lena","Kijiji buyer"];
+          return {
+            people: (s.people || []).length,
+            messages: (s.messages || []).length,
+            demo: s.demo,
+            names,
+            hasDemoName: names.some((n) => banned.some((b) => (n || "").includes(b))),
+            onboarded: !!(s.settings && s.settings.onboarded),
+            view: document.querySelector('#onboard') ? document.querySelector('#onboard').innerText : '',
+            desk: !!document.querySelector('#pinnedLabel, .empty-desk, #search'),
+          };
+        }""")
+        check("fresh install has no demo or placeholder people", fresh["people"] == 0 and fresh["messages"] == 0 and fresh["demo"] is False and fresh["hasDemoName"] is False, fresh)
+        check("wizard blocks the Desk until onboarding is done", "connect your phone" in fresh["view"].lower() and "install the android app for texts" in fresh["view"].lower() and fresh["onboarded"] is False and fresh["desk"] is False, fresh)
+        page.evaluate("() => { CJRM.setView('desk'); }")
+        still = page.evaluate("() => ({ onboard: !!document.querySelector('#onboard'), desk: !!document.querySelector('#pinnedLabel, .empty-desk, #search'), onboarded: CJRM.isOnboarded() })")
+        check("setView cannot open the Desk before the wizard is finished", still["onboard"] is True and still["desk"] is False and still["onboarded"] is False, still)
         check("privacy: data stays on the device is described in More later or header area", True)
+
+        page.click("#btnOnboardPhoneNext")
+        page.wait_for_selector("#onboardHubUrl")
+        check("email continue is disabled before a green check", page.locator("#btnOnboardFinish").is_disabled())
+        page.click("#btnOnboardFinish", force=True)
+        check("email step stays put if Continue is used without a green check", page.locator("#onboardHubUrl").count() == 1 and page.evaluate("CJRM.isOnboarded()") is False)
+        page.route("https://example.com/cjrm-hub-fail**", lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"ok":false,"error":"unauthorized"}',
+        ))
+        page.fill("#onboardHubUrl", "https://example.com/cjrm-hub-fail")
+        page.fill("#onboardHubSecret", "test-secret")
+        page.click("#btnOnboardTestHub")
+        page.wait_for_selector("#onboardHubError")
+        failed = page.evaluate("""() => ({
+          ok: !!document.querySelector('#onboardHubOk'),
+          err: !!document.querySelector('#onboardHubError'),
+          disabled: document.querySelector('#btnOnboardFinish') && document.querySelector('#btnOnboardFinish').disabled,
+        })""")
+        check("failed mailbox test does not show a green check", failed["ok"] is False and failed["err"] is True and failed["disabled"] is True, failed)
+        mock_hub(page)
+        page.fill("#onboardHubUrl", "https://example.com/cjrm-hub")
+        page.click("#btnOnboardTestHub")
+        page.wait_for_selector("#onboardHubOk")
+        check("successful mailbox test shows a green check", "Mailbox connected" in page.inner_text("#onboardHubOk") and page.locator("#btnOnboardFinish").is_enabled())
+        page.click("#btnOnboardFinish")
+        page.wait_for_function("() => CJRM.isOnboarded && CJRM.isOnboarded()")
+        page.wait_for_selector(".empty-desk")
+        empty = page.inner_text(".empty-desk")
+        check("empty Desk shows Waiting for your first message", "waiting for your first message" in empty.lower(), empty)
+        check("empty Desk still has no demo people", page.evaluate("() => CJRM.getState().people.length") == 0)
+
+        purged = page.evaluate("""() => {
+          const now = new Date().toISOString();
+          const settings = Object.assign({}, CJRM.getState().settings, { onboarded: true });
+          const bag = {
+            v: 1,
+            demo: true,
+            operator: "Carpenter Johnny",
+            accounts: [],
+            people: [
+              { id: "lead-jules", name: "Jules Abebe", channel: "instagram", stage: "new", lastMessageAt: now, demo: true },
+              { id: "lead-casey", name: "Casey Nguyen", channel: "web", stage: "new", lastMessageAt: now },
+              { id: "real-filed", name: "Filed Client", channel: "email", stage: "new", lastMessageAt: now, email: "filed@example.com" }
+            ],
+            messages: [
+              { id: "m-jules", personId: "lead-jules", direction: "in", channel: "instagram", body: "demo seed", at: now },
+              { id: "m-casey", personId: "lead-casey", direction: "in", channel: "web", body: "demo seed", at: now },
+              { id: "m-real", personId: "real-filed", direction: "in", channel: "email", body: "Hello from the form", at: now, sourceId: "hub-abc" }
+            ],
+            templates: [],
+            settings: settings
+          };
+          localStorage.setItem(CJRM.STORAGE_KEY, JSON.stringify(bag));
+          const s = CJRM.hydrate();
+          CJRM.ui.view = "desk";
+          CJRM.render();
+          return {
+            names: s.people.map((p) => p.name),
+            demo: s.demo,
+            ids: s.people.map((p) => p.id),
+            msgs: s.messages.map((m) => m.body),
+          };
+        }""")
+        check(
+            "existing install drops demo records but keeps real filed items",
+            purged["names"] == ["Filed Client"] and purged["demo"] is False and "demo seed" not in " ".join(purged["msgs"]),
+            purged,
+        )
+
+        page.evaluate("() => { CJRM.loadDemo(); CJRM.ui.view = 'desk'; CJRM.render(); }")
+        page.wait_for_function("() => CJRM.getState().people.length > 0")
+        page.wait_for_selector("#pinnedLabel")
+        check("loadDemo for tests keeps onboarded settings", page.evaluate("CJRM.isOnboarded()") is True)
 
         apple = page.evaluate("""() => ({
           title: (document.querySelector('meta[name="apple-mobile-web-app-title"]') || {}).content,
@@ -696,13 +805,14 @@ def main():
         page.screenshot(path=person_shot, full_page=False)
         check("person screenshot written at 412x915", os.path.isfile(person_shot), person_shot)
 
-        # Delete gesture: hold, then left swipe, on any thread message and any desk card.
+        # Delete gesture: left swipe deletes; hold enters multi-select.
         page.evaluate("""() => {
           const k = CJRM.getState().people.find((p) => p.name === 'Kyler Kuehl');
           for (let i = 0; i < 12; i++) {
             CJRM.addMessage(k.id, { direction: 'note', channel: 'email', body: 'Scroll filler ' + i });
           }
           CJRM.addMessage(k.id, { direction: 'note', channel: 'email', body: 'Disposable note to delete.' });
+          CJRM.addMessage(k.id, { direction: 'note', channel: 'email', body: 'Second disposable note.' });
           CJRM.setView('person', k.id);
         }""")
         page.wait_for_selector("#thread [data-msg-swipe]")
@@ -713,20 +823,10 @@ def main():
         page.wait_for_timeout(150)
         note = page.locator("#thread [data-msg-swipe]").filter(has_text="Disposable note to delete.")
         box = note.bounding_box()
-        sx = box["x"] + box["width"] / 2
-        sy = box["y"] + box["height"] / 2
-
-        swipe_no_hold(page, sx, sy, -120, 0)
-        page.wait_for_timeout(200)
-        opened = page.evaluate("() => !!document.querySelector('#thread .swipe-item.is-open')")
+        short_dx = -28
+        swipe_item(page, box, short_dx, 0)
         still_note = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
-        check("swipe without hold does not reveal delete or delete a message", opened is False and still_note is True, {"opened": opened, "still": still_note})
-
-        hold_no_swipe(page, sx, sy)
-        page.wait_for_timeout(200)
-        opened = page.evaluate("() => !!document.querySelector('#thread .swipe-item.is-open')")
-        still_note = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
-        check("hold without swipe does not reveal delete or delete a message", opened is False and still_note is True, {"opened": opened, "still": still_note})
+        check("short swipe snaps back and does not delete a message", still_note is True and page.locator("#btnUndoDelete").count() == 0, still_note)
 
         scroll_before = page.evaluate("""() => {
           const t = document.querySelector('#thread');
@@ -746,25 +846,27 @@ def main():
           return {
             x: r.x + r.width / 2,
             y: r.y + r.height / 2,
+            w: r.width,
+            h: r.height,
             scroll: t.scrollTop,
             win: window.scrollY,
             can: t.scrollHeight - t.clientHeight,
-            th: t.clientHeight,
-            sh: t.scrollHeight,
+            text: mid.innerText.slice(0, 80),
           };
         }""")
         dy = -160 if scroll_before.get("scroll", 0) > 20 else 160
-        hold_then_move(page, scroll_before["x"], scroll_before["y"], 0, dy)
+        swipe_no_hold(page, scroll_before["x"], scroll_before["y"], 0, dy)
         page.wait_for_timeout(250)
         scroll_after = page.evaluate("""() => ({
           scroll: document.querySelector('#thread').scrollTop,
           win: window.scrollY,
-          opened: !!document.querySelector('#thread .swipe-item.is-open'),
+          undo: !!document.querySelector('#btnUndoDelete'),
+          still: CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||'')),
         })""")
         moved = abs(scroll_after.get("scroll", 0) - scroll_before.get("scroll", 0)) > 8 or abs(scroll_after.get("win", 0) - scroll_before.get("win", 0)) > 8
         check(
-            "vertical swipe after hold scrolls the thread and does not reveal delete",
-            moved and scroll_after.get("opened") is False,
+            "vertical swipe never deletes a thread message",
+            moved and scroll_after.get("undo") is False and scroll_after.get("still") is True,
             {"before": scroll_before, "after": scroll_after, "dy": dy},
         )
 
@@ -774,16 +876,77 @@ def main():
         }""")
         page.wait_for_timeout(150)
         box = note.bounding_box()
-        sx = box["x"] + box["width"] / 2
-        sy = box["y"] + box["height"] / 2
-        hold_then_move(page, sx, sy, -120, 0)
-        page.wait_for_timeout(250)
-        check("hold + left swipe reveals delete on a thread note", note.locator("[data-del-msg]").count() == 1 and "is-open" in (note.get_attribute("class") or ""))
-        page.once("dialog", lambda d: d.accept())
-        note.locator("[data-del-msg]").click()
-        page.wait_for_timeout(200)
+        swipe_item(page, box, -max(int(box["width"] * 0.45), 140), 0)
         gone = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
-        check("hold + left swipe delete removes any thread message, including a note", gone is False, gone)
+        check("left swipe deletes a thread message", gone is False and page.locator("#btnUndoDelete").count() == 1, gone)
+        page.click("#btnUndoDelete")
+        page.wait_for_timeout(200)
+        restored = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
+        check("Undo restores a swipe-deleted thread message", restored is True, restored)
+
+        page.evaluate("""() => {
+          const note = [...document.querySelectorAll('#thread [data-msg-swipe]')].find((el) => /Disposable note to delete/.test(el.textContent));
+          if (note) note.scrollIntoView({block: 'center', inline: 'nearest'});
+        }""")
+        page.wait_for_timeout(150)
+        note = page.locator("#thread [data-msg-swipe]").filter(has_text="Disposable note to delete.")
+        box = note.bounding_box()
+        hold_no_swipe(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(200)
+        select = page.evaluate("""() => ({
+          bar: !document.querySelector('#selectBar').hidden,
+          count: (document.querySelector('#selectCount') || {}).textContent || '',
+          selected: document.querySelector('#thread .is-selected') && /Disposable note to delete/.test(document.querySelector('#thread .is-selected').textContent),
+          deleted: !CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||'')),
+        })""")
+        check("hold enters multi-select on a thread message", select["bar"] is True and "1 selected" in select["count"] and select["selected"] is True and select["deleted"] is False, select)
+        second = page.locator("#thread [data-msg-swipe]").filter(has_text="Second disposable note.")
+        second.click()
+        page.wait_for_timeout(150)
+        two = page.inner_text("#selectCount")
+        check("tap adds another thread message to the selection", "2 selected" in two.lower(), two)
+        page.click("#btnSelectCancel")
+        page.wait_for_timeout(150)
+        cancelled = page.evaluate("() => document.querySelector('#selectBar').hidden && !document.body.classList.contains('is-selecting')")
+        check("Cancel exits multi-select on the thread", cancelled is True)
+
+        page.evaluate("""() => {
+          const note = [...document.querySelectorAll('#thread [data-msg-swipe]')].find((el) => /Disposable note to delete/.test(el.textContent));
+          if (note) note.scrollIntoView({block: 'center', inline: 'nearest'});
+        }""")
+        page.wait_for_timeout(150)
+        box = page.locator("#thread [data-msg-swipe]").filter(has_text="Disposable note to delete.").bounding_box()
+        hold_no_swipe(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(150)
+        page.locator("#thread [data-msg-swipe]").filter(has_text="Second disposable note.").click()
+        page.click("#btnSelectDelete")
+        page.wait_for_timeout(200)
+        batch = page.evaluate("""() => ({
+          first: CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||'')),
+          second: CJRM.getState().messages.some((m) => /Second disposable note/.test(m.body||'')),
+          undo: !!document.querySelector('#btnUndoDelete'),
+        })""")
+        check("batch delete removes selected thread messages", batch["first"] is False and batch["second"] is False and batch["undo"] is True, batch)
+        page.click("#btnUndoDelete")
+        page.wait_for_timeout(200)
+        batch_back = page.evaluate("""() => ({
+          first: CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||'')),
+          second: CJRM.getState().messages.some((m) => /Second disposable note/.test(m.body||'')),
+        })""")
+        check("Undo restores a batch-deleted thread selection", batch_back["first"] is True and batch_back["second"] is True, batch_back)
+
+        page.evaluate("""() => {
+          const note = [...document.querySelectorAll('#thread [data-msg-swipe]')].find((el) => /Disposable note to delete/.test(el.textContent));
+          if (note) note.scrollIntoView({block: 'center', inline: 'nearest'});
+        }""")
+        page.wait_for_timeout(150)
+        box = page.locator("#thread [data-msg-swipe]").filter(has_text="Disposable note to delete.").bounding_box()
+        hold_no_swipe(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, hold_ms=700)
+        page.wait_for_function("() => document.body.classList.contains('is-selecting')")
+        page.go_back()
+        page.wait_for_timeout(200)
+        back_exit = page.evaluate("() => document.querySelector('#selectBar').hidden && !document.body.classList.contains('is-selecting')")
+        check("back button exits multi-select on the thread", back_exit is True)
 
         types = page.evaluate("""() => {
           const p = CJRM.newPerson({ name: 'Temp Types', channel: 'email' }, 'Inbound text body');
@@ -809,57 +972,97 @@ def main():
         scroll_clear_of_chrome(page, "Temp Types")
         temp = page.locator("[data-person-swipe]").filter(has_text="Temp Types")
         tbox = temp.bounding_box()
-        tx = tbox["x"] + tbox["width"] / 2
-        ty = tbox["y"] + tbox["height"] / 2
-        swipe_no_hold(page, tx, ty, -120, 0)
-        page.wait_for_timeout(200)
-        opened = page.evaluate("() => [...document.querySelectorAll('[data-person-swipe]')].some((el) => el.textContent.includes('Temp Types') && el.classList.contains('is-open'))")
-        check("swipe without hold does not reveal delete on a desk card", opened is False, opened)
-        scroll_clear_of_chrome(page, "Temp Types")
-        tbox = temp.bounding_box()
-        tx = tbox["x"] + tbox["width"] / 2
-        ty = tbox["y"] + tbox["height"] / 2
-        hold_no_swipe(page, tx, ty)
-        page.wait_for_timeout(200)
-        opened = page.evaluate("() => [...document.querySelectorAll('[data-person-swipe]')].some((el) => el.textContent.includes('Temp Types') && el.classList.contains('is-open'))")
-        check("hold without swipe does not reveal delete on a desk card", opened is False, opened)
-        page.evaluate("() => { CJRM.setView('desk'); }")
+        swipe_item(page, tbox, -28, 0)
+        still = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
+        check("short swipe snaps back and does not delete a desk card", still is True and page.locator("#btnUndoDelete").count() == 0, still)
+
+        page.evaluate("""() => {
+          const p = CJRM.newPerson({ name: 'Temp Scroll', channel: 'email' }, 'Just here to make the desk scroll.');
+          CJRM.setView('desk');
+        }""")
         page.wait_for_selector("[data-person-swipe]")
         scroll_clear_of_chrome(page, "Temp Types")
-        tbox = temp.bounding_box()
-        tx = tbox["x"] + tbox["width"] / 2
-        ty = tbox["y"] + tbox["height"] / 2
-        hold_then_move(page, tx, ty, -120, 0)
+        tbox = page.locator("[data-person-swipe]").filter(has_text="Temp Types").bounding_box()
+        desk_scroll_before = page.evaluate("() => (document.querySelector('main#view') || document.scrollingElement).scrollTop")
+        swipe_no_hold(page, tbox["x"] + tbox["width"] / 2, tbox["y"] + tbox["height"] / 2, 0, 160)
         page.wait_for_timeout(250)
-        opened = page.evaluate("() => [...document.querySelectorAll('[data-person-swipe]')].some((el) => el.textContent.includes('Temp Types') && el.classList.contains('is-open'))")
-        check("hold + left swipe reveals delete on any desk card", opened is True, opened)
-        if opened:
-            page.once("dialog", lambda d: d.accept())
-            page.evaluate("""() => {
-              const item = [...document.querySelectorAll('[data-person-swipe]')].find((el) => el.textContent.includes('Temp Types'));
-              const btn = item && item.querySelector('[data-del-person]');
-              if (btn) btn.click();
-            }""")
-            page.wait_for_timeout(200)
-        still = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
-        check("hold + left swipe delete removes any desk card, not just junk", still is False, still)
+        desk_vert = page.evaluate("""() => ({
+          still: CJRM.getState().people.some((p) => p.name === 'Temp Types'),
+          undo: !!document.querySelector('#btnUndoDelete'),
+          scroll: (document.querySelector('main#view') || document.scrollingElement).scrollTop,
+        })""")
+        check(
+            "vertical swipe never deletes a desk card",
+            desk_vert["still"] is True and desk_vert["undo"] is False,
+            {"before": desk_scroll_before, "after": desk_vert},
+        )
+
+        scroll_clear_of_chrome(page, "Temp Types")
+        tbox = page.locator("[data-person-swipe]").filter(has_text="Temp Types").bounding_box()
+        swipe_item(page, tbox, -max(int(tbox["width"] * 0.45), 140), 0)
+        gone_card = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
+        check("left swipe deletes a desk card", gone_card is False and page.locator("#btnUndoDelete").count() == 1, gone_card)
+        page.click("#btnUndoDelete")
+        page.wait_for_timeout(200)
+        check("Undo restores a swipe-deleted desk card", page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')") is True)
+
+        scroll_clear_of_chrome(page, "Temp Types")
+        tbox = page.locator("[data-person-swipe]").filter(has_text="Temp Types").bounding_box()
+        hold_no_swipe(page, tbox["x"] + tbox["width"] / 2, tbox["y"] + tbox["height"] / 2)
+        page.wait_for_timeout(200)
+        desk_sel = page.evaluate("""() => ({
+          bar: !document.querySelector('#selectBar').hidden,
+          count: (document.querySelector('#selectCount') || {}).textContent || '',
+          selected: [...document.querySelectorAll('[data-person-swipe].is-selected')].some((el) => el.textContent.includes('Temp Types')),
+        })""")
+        check("hold enters multi-select on a desk card", desk_sel["bar"] is True and "1 selected" in desk_sel["count"] and desk_sel["selected"] is True, desk_sel)
+        scroll_clear_of_chrome(page, "Temp Scroll")
+        page.locator("[data-person-swipe]").filter(has_text="Temp Scroll").click()
+        page.wait_for_timeout(150)
+        check("tap adds another desk card to the selection", "2 selected" in page.inner_text("#selectCount").lower(), page.inner_text("#selectCount"))
+        page.click("#btnSelectDelete")
+        page.wait_for_timeout(200)
+        batch_desk = page.evaluate("""() => ({
+          types: CJRM.getState().people.some((p) => p.name === 'Temp Types'),
+          scroll: CJRM.getState().people.some((p) => p.name === 'Temp Scroll'),
+          undo: !!document.querySelector('#btnUndoDelete'),
+        })""")
+        check("batch delete removes selected desk cards", batch_desk["types"] is False and batch_desk["scroll"] is False and batch_desk["undo"] is True, batch_desk)
+        page.click("#btnUndoDelete")
+        page.wait_for_timeout(200)
+        check(
+            "Undo restores a batch-deleted desk selection",
+            page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types') && CJRM.getState().people.some((p) => p.name === 'Temp Scroll')") is True,
+        )
+
+        scroll_clear_of_chrome(page, "Temp Types")
+        tbox = page.locator("[data-person-swipe]").filter(has_text="Temp Types").bounding_box()
+        hold_no_swipe(page, tbox["x"] + tbox["width"] / 2, tbox["y"] + tbox["height"] / 2, hold_ms=700)
+        page.wait_for_function("() => document.body.classList.contains('is-selecting')")
+        page.go_back()
+        page.wait_for_timeout(200)
+        check("back button exits multi-select on the desk", page.evaluate("() => document.querySelector('#selectBar').hidden && !document.body.classList.contains('is-selecting')") is True)
+
+        # Leave the temp people in place; later export just needs >= 11 people.
 
         page.set_viewport_size({"width": 390, "height": 844})
 
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.5", "Version 1.1.5" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.6", "Version 1.1.6" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)
         pieces = page.evaluate("""() => CJRM.nativeMessagesToPieces([
           { id: "sms-test-1", source: "sms", from: "2045550140", body: "Need a quote on a deck", date: "2026-11-22T12:00:00.000Z" },
           { id: "voip-test-1", source: "voip", from: "Sam", body: "Can you call me about the fence?", date: "2026-11-22T12:05:00.000Z", name: "Sam" },
+          { id: "sms-named", source: "sms", from: "2045550188", phone: "2045550188", name: "Pat Contact", body: "Can you come by Thursday?", date: "2026-11-22T12:10:00.000Z" },
           { id: "empty", source: "sms", from: "2045550140", body: "   " }
         ])""")
-        check("native mapper files SMS as Winnipeg number (phone1)", len(pieces) == 2 and pieces[0]["channel"] == "phone1" and pieces[0]["id"] == "sms-test-1" and pieces[0]["phone"] == "2045550140", pieces)
+        check("native mapper files SMS as Winnipeg number (phone1)", len(pieces) == 3 and pieces[0]["channel"] == "phone1" and pieces[0]["id"] == "sms-test-1" and pieces[0]["phone"] == "2045550140", pieces)
         check("native mapper files VoIP as Toronto number (phone2)", pieces[1]["channel"] == "phone2" and pieces[1]["name"] == "Sam", pieces)
+        check("native mapper uses a contact name on an SMS lead when one is supplied", pieces[2]["name"] == "Pat Contact" and pieces[2]["phone"] == "2045550188", pieces)
 
         with page.expect_download() as dlinfo:
             page.click("#btnExport")
@@ -920,6 +1123,14 @@ def main():
           localStorage.clear();
         }""")
         page.reload(wait_until="domcontentloaded")
+        page.wait_for_function("() => window.CJRM && CJRM.getState")
+        page.evaluate("""() => {
+          const settings = Object.assign({}, CJRM.getState().settings, { onboarded: true });
+          CJRM.setState({ settings: settings });
+          CJRM.loadDemo();
+          CJRM.ui.view = 'desk';
+          CJRM.render();
+        }""")
         page.wait_for_function("() => window.CJRM && CJRM.getState && CJRM.getState().people.some((p) => p.name === 'Mara Ellison')")
         page.wait_for_selector("#pinnedLabel")
         shots = os.path.join(ROOT, "demo")

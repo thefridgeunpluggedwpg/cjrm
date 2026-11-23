@@ -37,6 +37,14 @@ import java.util.Set;
             strings = { Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS }
         ),
         @Permission(
+            alias = "contacts",
+            strings = { Manifest.permission.READ_CONTACTS }
+        ),
+        @Permission(
+            alias = "phone",
+            strings = { Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS }
+        ),
+        @Permission(
             alias = "alerts",
             strings = { Manifest.permission.POST_NOTIFICATIONS }
         )
@@ -76,6 +84,7 @@ public class CjrmNativePlugin extends Plugin {
         JSObject out = new JSObject();
         out.put("smsReceiveGranted", granted(Manifest.permission.RECEIVE_SMS));
         out.put("smsReadGranted", granted(Manifest.permission.READ_SMS));
+        out.put("contactsGranted", granted(Manifest.permission.READ_CONTACTS));
         out.put("notificationAccess", hasNotificationAccess());
         out.put("voipPackage", NativeInbox.getVoipPackage(getContext()));
         out.put("voipAppLabel", NativeInbox.getVoipLabel(getContext()));
@@ -95,6 +104,30 @@ public class CjrmNativePlugin extends Plugin {
     @PermissionCallback
     private void smsPermsResult(PluginCall call) {
         getStatus(call);
+    }
+
+    @PluginMethod
+    public void requestPhonePermissions(PluginCall call) {
+        if (granted(Manifest.permission.RECEIVE_SMS)
+                && granted(Manifest.permission.READ_SMS)
+                && granted(Manifest.permission.READ_CONTACTS)) {
+            getStatus(call);
+            return;
+        }
+        requestPermissionForAlias("phone", call, "phonePermsResult");
+    }
+
+    @PermissionCallback
+    private void phonePermsResult(PluginCall call) {
+        getStatus(call);
+    }
+
+    @PluginMethod
+    public void lookupContactName(PluginCall call) {
+        String phone = call.getString("phone", "");
+        JSObject out = new JSObject();
+        out.put("name", NativeInbox.contactName(getContext(), phone));
+        call.resolve(out);
     }
 
     @PluginMethod
@@ -152,7 +185,7 @@ public class CjrmNativePlugin extends Plugin {
                     String body = cursor.getString(2);
                     long date = cursor.getLong(3);
                     if (body == null || body.trim().isEmpty()) continue;
-                    messages.add(NativeInbox.smsMessage(from, body.trim(), date));
+                    messages.add(NativeInbox.smsMessage(getContext(), from, body.trim(), date));
                 }
             }
         } catch (SecurityException e) {

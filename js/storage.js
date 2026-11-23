@@ -45,6 +45,7 @@
       freshAt: row.freshAt ? String(row.freshAt) : null,
       createdAt: String(row.createdAt || new Date().toISOString()),
       lastMessageAt: String(row.lastMessageAt || new Date().toISOString()),
+      demo: Boolean(row.demo),
     };
   }
 
@@ -92,10 +93,41 @@
 
   let state = blankState();
 
+  function isDemoPerson(p) {
+    if (!p) return false;
+    if (p.demo) return true;
+    return (CJRM.DEMO_PERSON_IDS || []).indexOf(p.id) !== -1;
+  }
+
+  function purgeDemoRecords() {
+    const demoIds = {};
+    state.people.forEach(function (p) { if (isDemoPerson(p)) demoIds[p.id] = true; });
+    const keep = {};
+    state.messages.forEach(function (m) {
+      if (demoIds[m.personId] && m.sourceId) keep[m.personId] = true;
+    });
+    const people = state.people.filter(function (p) { return !demoIds[p.id] || keep[p.id]; }).map(function (p) {
+      if (!keep[p.id]) return p;
+      const next = Object.assign({}, p);
+      delete next.demo;
+      return next;
+    });
+    const messages = state.messages.filter(function (m) {
+      if (demoIds[m.personId] && !keep[m.personId]) return false;
+      if (keep[m.personId] && !m.sourceId) return false;
+      return true;
+    });
+    const changed = people.length !== state.people.length || messages.length !== state.messages.length || state.demo;
+    state.people = people;
+    state.messages = messages;
+    state.demo = false;
+    return changed;
+  }
+
   function hydrate() {
     const raw = loadRaw();
     if (!raw) {
-      state = CJRM.buildDemo(Date.now());
+      state = blankState();
       persist(state);
       return state;
     }
@@ -128,6 +160,8 @@
       settings: Object.assign({}, CJRM.DEFAULT_SETTINGS, raw.settings || {}),
     };
     if (!Array.isArray(state.settings.seenHubIds)) state.settings.seenHubIds = [];
+    if (state.settings.onboarded == null) state.settings.onboarded = false;
+    if (purgeDemoRecords()) persist(state);
     return state;
   }
 
@@ -142,13 +176,22 @@
   }
 
   function loadDemo(now) {
+    const prev = state && state.settings ? Object.assign({}, state.settings) : {};
     state = CJRM.buildDemo(now == null ? Date.now() : now);
+    state.settings = Object.assign({}, state.settings, {
+      onboarded: Boolean(prev.onboarded),
+      hubUrl: prev.hubUrl || state.settings.hubUrl || "",
+      hubSecret: prev.hubSecret || state.settings.hubSecret || "",
+      seenHubIds: Array.isArray(prev.seenHubIds) ? prev.seenHubIds : (state.settings.seenHubIds || []),
+    });
     persist(state);
     return state;
   }
 
   function clearDesk() {
+    const settings = state && state.settings ? Object.assign({}, state.settings) : Object.assign({}, CJRM.DEFAULT_SETTINGS);
     state = blankState();
+    state.settings = settings;
     persist(state);
     return state;
   }
@@ -239,31 +282,102 @@
     return person;
   }
 
-  function removePerson(id) {
-    state.people = state.people.filter(function (p) { return p.id !== id; });
-    state.messages = state.messages.filter(function (m) { return m.personId !== id; });
+  function cloneRow(row) {
+    return Object.assign({}, row, row.photoIds ? { photoIds: (row.photoIds || []).slice() } : {});
+  }
+
+  function rememberSeenIds(ids) {
+    const seen = (state.settings.seenHubIds || []).slice();
+    (ids || []).forEach(function (id) {
+      const s = String(id || "");
+      if (s && seen.indexOf(s) === -1) seen.push(s);
+    });
+    state.settings.seenHubIds = seen.length > 2000 ? seen.slice(seen.length - 2000) : seen;
+  }
+
+  function sourceIdsOf(people, messages) {
+    const ids = [];
+    (messages || []).forEach(function (m) { if (m && m.sourceId) ids.push(m.sourceId); });
+    (people || []).forEach(function (p) { if (p && p.sourceId) ids.push(p.sourceId); });
+    return ids;
+  }
+
+  function relinkPersonMail(person) {
+    if (!person) return;
+    const talk = state.messages.filter(function (m) {
+      return m.personId === person.id && m.direction !== "note";
+    });
+    const last = talk.length ? talk[talk.length - 1] : null;
+    const unread = Boolean(last && last.direction === "in" && person.unread);
+    const i = state.people.findIndex(function (p) { return p.id === person.id; });
+    if (i < 0) return;
+    state.people[i] = Object.assign({}, state.people[i], {
+      lastMessageAt: last ? last.at : state.people[i].createdAt,
+      unread: unread
+    });
+  }
+
+  function removePeople(ids) {
+    const idSet = {};
+    (ids || []).forEach(function (id) { if (id) idSet[id] = true; });
+    const people = state.people.filter(function (p) { return idSet[p.id]; }).map(cloneRow);
+    const messages = state.messages.filter(function (m) { return idSet[m.personId]; }).map(cloneRow);
+    rememberSeenIds(sourceIdsOf(people, messages));
+    state.people = state.people.filter(function (p) { return !idSet[p.id]; });
+    state.messages = state.messages.filter(function (m) { return !idSet[m.personId]; });
     persist(state);
+    return { people: people, messages: messages };
+  }
+
+  function removeMessages(ids) {
+    const idSet = {};
+    (ids || []).forEach(function (id) { if (id) idSet[id] = true; });
+    const messages = state.messages.filter(function (m) { return idSet[m.id]; }).map(cloneRow);
+    if (!messages.length) return { messages: [], peopleState: [] };
+    const personIds = {};
+    messages.forEach(function (m) { if (m.personId) personIds[m.personId] = true; });
+    const peopleState = state.people.filter(function (p) { return personIds[p.id]; }).map(cloneRow);
+    rememberSeenIds(sourceIdsOf(null, messages));
+    state.messages = state.messages.filter(function (m) { return !idSet[m.id]; });
+    Object.keys(personIds).forEach(function (pid) { relinkPersonMail(personById(pid)); });
+    persist(state);
+    return { messages: messages, peopleState: peopleState };
+  }
+
+  function removePerson(id) {
+    const snap = removePeople([id]);
+    return snap.people.length > 0;
   }
 
   function removeMessage(id) {
-    const msg = state.messages.find(function (m) { return m.id === id; });
-    if (!msg) return false;
-    state.messages = state.messages.filter(function (m) { return m.id !== id; });
-    const person = personById(msg.personId);
-    if (person) {
-      const talk = state.messages.filter(function (m) {
-        return m.personId === person.id && m.direction !== "note";
-      });
-      const last = talk.length ? talk[talk.length - 1] : null;
-      const unread = talk.some(function (m) { return m.direction === "in" && person.unread; }) && person.unread;
-      patchPerson(person.id, {
-        lastMessageAt: last ? last.at : person.createdAt,
-        unread: Boolean(last && last.direction === "in" && unread)
-      });
-    } else {
-      persist(state);
-    }
-    return true;
+    const snap = removeMessages([id]);
+    return snap.messages.length > 0;
+  }
+
+  function restoreDeleted(snap) {
+    if (!snap) return false;
+    let changed = false;
+    (snap.people || []).forEach(function (p) {
+      if (!personById(p.id)) {
+        state.people = [cloneRow(p)].concat(state.people);
+        changed = true;
+      }
+    });
+    (snap.messages || []).forEach(function (m) {
+      if (!state.messages.some(function (x) { return x.id === m.id; })) {
+        state.messages = state.messages.concat([cloneRow(m)]);
+        changed = true;
+      }
+    });
+    (snap.peopleState || []).forEach(function (p) {
+      const i = state.people.findIndex(function (x) { return x.id === p.id; });
+      if (i >= 0) {
+        state.people[i] = cloneRow(p);
+        changed = true;
+      }
+    });
+    if (changed) persist(state);
+    return changed;
   }
 
   function filePieces(pieces, opts) {
@@ -287,7 +401,7 @@
         results.push({ status: "skipped", sourceId: sourceId, reason: "empty", name: name, channel: channel });
         return;
       }
-      if (sourceId && state.messages.some(function (m) { return m.sourceId && m.sourceId === sourceId; })) {
+      if (sourceId && (state.messages.some(function (m) { return m.sourceId && m.sourceId === sourceId; }) || (state.settings.seenHubIds || []).indexOf(sourceId) !== -1)) {
         results.push({ status: "duplicate", sourceId: sourceId, name: name, channel: channel });
         return;
       }
@@ -375,6 +489,7 @@
     if (importedSettings.hubSecret === "(stored on device, omitted from this file)") {
       importedSettings.hubSecret = secretToKeep || state.settings.hubSecret || "";
     }
+    if (state.settings && state.settings.onboarded) importedSettings.onboarded = true;
     state = {
       demo: Boolean(parsed.demo),
       operator: typeof parsed.operator === "string" && parsed.operator.trim() ? parsed.operator : state.operator,
@@ -455,6 +570,8 @@
   CJRM.getState = getState;
   CJRM.setState = setState;
   CJRM.loadDemo = loadDemo;
+  CJRM.purgeDemoRecords = purgeDemoRecords;
+  CJRM.isDemoPerson = isDemoPerson;
   CJRM.clearDesk = clearDesk;
   CJRM.personById = personById;
   CJRM.patchPerson = patchPerson;
@@ -462,6 +579,10 @@
   CJRM.newPerson = newPerson;
   CJRM.removePerson = removePerson;
   CJRM.removeMessage = removeMessage;
+  CJRM.removePeople = removePeople;
+  CJRM.removeMessages = removeMessages;
+  CJRM.restoreDeleted = restoreDeleted;
+  CJRM.rememberSeenIds = rememberSeenIds;
   CJRM.filePieces = filePieces;
   CJRM.exportBag = exportBag;
   CJRM.importBag = importBag;

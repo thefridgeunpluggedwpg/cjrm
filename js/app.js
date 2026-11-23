@@ -19,6 +19,13 @@
     logKind: "call",
     logDir: "in",
     replyOpen: false,
+    selecting: null,
+    selected: {},
+    selectPushed: false,
+    onboardStep: 1,
+    hubTestOk: false,
+    hubTestError: "",
+    phoneStatus: null,
   };
 
   let deferredPrompt = null;
@@ -43,6 +50,150 @@
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(function () { el.remove(); }, 2800);
+  }
+
+  let undoTimer = null;
+  let undoSnap = null;
+  let undoEl = null;
+
+  function clearUndoToast() {
+    if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+    if (undoEl) { undoEl.remove(); undoEl = null; }
+  }
+
+  function showUndoToast(label, snap) {
+    clearUndoToast();
+    undoSnap = snap;
+    const el = document.createElement("div");
+    el.className = "toast toast-undo";
+    el.setAttribute("role", "status");
+    el.innerHTML = "<span>" + esc(label) + '</span> <button type="button" class="toast-undo-btn" id="btnUndoDelete">Undo</button>';
+    document.body.appendChild(el);
+    undoEl = el;
+    el.querySelector("#btnUndoDelete").addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      undoLastDelete();
+    });
+    undoTimer = setTimeout(function () {
+      undoSnap = null;
+      clearUndoToast();
+    }, 5000);
+  }
+
+  function undoLastDelete() {
+    const snap = undoSnap;
+    undoSnap = null;
+    clearUndoToast();
+    if (!snap) return;
+    CJRM.restoreDeleted(snap);
+    render();
+  }
+
+  function selectedCount() {
+    return Object.keys(ui.selected || {}).length;
+  }
+
+  function paintSelectBar() {
+    const bar = $("selectBar");
+    if (!bar) return;
+    const on = Boolean(ui.selecting);
+    const n = selectedCount();
+    bar.hidden = !on;
+    document.body.classList.toggle("is-selecting", on);
+    if ($("selectCount")) $("selectCount").textContent = n === 1 ? "1 selected" : n + " selected";
+    if ($("btnSelectDelete")) $("btnSelectDelete").disabled = n === 0;
+  }
+
+  function clearSelectHistory() {
+    if (!ui.selectPushed) return;
+    ui.selectPushed = false;
+    try { history.replaceState(null, ""); } catch (err) {}
+  }
+
+  function exitSelect(fromPop) {
+    const was = ui.selecting;
+    ui.selecting = null;
+    ui.selected = {};
+    if (ui.selectPushed && !fromPop) {
+      ui.selectPushed = false;
+      try { history.back(); } catch (err) {}
+    } else {
+      ui.selectPushed = false;
+    }
+    if (was) render();
+    else paintSelectBar();
+  }
+
+  function enterSelect(kind, id) {
+    ui.selecting = kind;
+    ui.selected = {};
+    if (id) ui.selected[id] = true;
+    if (navigator.vibrate) navigator.vibrate(12);
+    if (!ui.selectPushed) {
+      try { history.pushState({ cjrmSelect: 1 }, ""); ui.selectPushed = true; } catch (err) {}
+    }
+    render();
+  }
+
+  function toggleSelect(id) {
+    if (!ui.selecting) return;
+    if (ui.selected[id]) delete ui.selected[id];
+    else ui.selected[id] = true;
+    const el = document.querySelector('[data-person-swipe="' + id + '"], [data-msg-swipe="' + id + '"]');
+    if (el) el.classList.toggle("is-selected", Boolean(ui.selected[id]));
+    paintSelectBar();
+  }
+
+  function visibleSelectIds() {
+    const attr = ui.selecting === "desk" ? "data-person-swipe" : "data-msg-swipe";
+    return Array.prototype.map.call(document.querySelectorAll("[" + attr + "]"), function (el) {
+      return el.getAttribute(attr);
+    }).filter(Boolean);
+  }
+
+  function selectAllVisible() {
+    if (!ui.selecting) return;
+    ui.selected = {};
+    visibleSelectIds().forEach(function (id) { ui.selected[id] = true; });
+    render();
+  }
+
+  function deletePeopleWithUndo(ids) {
+    if (!ids || !ids.length) return;
+    const snap = CJRM.removePeople(ids);
+    if (ids.indexOf(ui.personId) !== -1) ui.personId = null;
+    const n = (snap.people || []).length;
+    const label = n === 1 ? "Person deleted" : n + " people deleted";
+    if (ui.selecting) {
+      ui.selecting = null;
+      ui.selected = {};
+      clearSelectHistory();
+    }
+    showUndoToast(label, snap);
+    if (ui.view !== "desk") setView("desk");
+    else render();
+  }
+
+  function deleteMessagesWithUndo(ids) {
+    if (!ids || !ids.length) return;
+    const snap = CJRM.removeMessages(ids);
+    const n = (snap.messages || []).length;
+    const label = n === 1 ? "Message deleted" : n + " messages deleted";
+    if (ui.selecting) {
+      ui.selecting = null;
+      ui.selected = {};
+      clearSelectHistory();
+    }
+    showUndoToast(label, snap);
+    render();
+  }
+
+  function deleteSelected() {
+    const ids = Object.keys(ui.selected || {});
+    if (!ids.length) return;
+    if (ui.selecting === "desk") deletePeopleWithUndo(ids);
+    else deleteMessagesWithUndo(ids);
   }
 
   function paintNewBadge() {
@@ -90,7 +241,17 @@
     ui.query = "";
   }
 
+  function isOnboarded() {
+    return Boolean((CJRM.getState().settings || {}).onboarded);
+  }
+
   function setView(name, personId) {
+    if (!isOnboarded() && name !== "onboard") name = "onboard";
+    if (ui.selecting) {
+      ui.selecting = null;
+      ui.selected = {};
+      clearSelectHistory();
+    }
     ui.view = name;
     if (personId && personId !== ui.personId) ui.replyOpen = false;
     if (personId) ui.personId = personId;
@@ -115,24 +276,32 @@
     const pinned = state.people.filter(function (p) { return CJRM.slipOf(p, state.messages, now); });
     const pin = $("pinCount");
     if (pin) {
-      pin.hidden = false;
-      pin.dataset.empty = pinned.length ? "false" : "true";
-      pin.textContent = pinned.length ? pinned.length + (pinned.length === 1 ? " due" : " due") : "All clear";
+      if (!isOnboarded() || ui.view === "onboard") {
+        pin.hidden = true;
+      } else {
+        pin.hidden = false;
+        pin.dataset.empty = pinned.length ? "false" : "true";
+        pin.textContent = pinned.length ? pinned.length + (pinned.length === 1 ? " due" : " due") : "All clear";
+      }
     }
     paintNewBadge();
     const banner = $("demoBanner");
-    if (banner) banner.hidden = !state.demo || ui.hideDemoBanner;
+    if (banner) banner.hidden = true;
   }
 
   function render() {
     updateChrome();
     const view = $("view");
     view.classList.toggle("person-mode", ui.view === "person");
-    if (ui.view === "desk") view.innerHTML = renderDesk();
+    document.body.classList.toggle("is-onboarding", ui.view === "onboard" || !isOnboarded());
+    if (!isOnboarded()) ui.view = "onboard";
+    if (ui.view === "onboard") view.innerHTML = renderOnboard();
+    else if (ui.view === "desk") view.innerHTML = renderDesk();
     else if (ui.view === "person") view.innerHTML = renderPerson();
     else if (ui.view === "add") view.innerHTML = renderAdd();
     else view.innerHTML = renderMore();
     bind();
+    paintSelectBar();
     if (ui.view === "person" && ui.personTab === "thread") {
       const thread = document.getElementById("thread");
       if (thread) {
@@ -145,6 +314,57 @@
   CJRM.render = render;
   CJRM.ui = ui;
   CJRM.setView = setView;
+
+  function phonePermsGranted(status) {
+    status = status || {};
+    return Boolean(status.smsReceiveGranted && status.smsReadGranted && status.contactsGranted);
+  }
+
+  function renderOnboard() {
+    const native = typeof CJRM.isNativeApp === "function" && CJRM.isNativeApp();
+    const step = ui.onboardStep === 2 ? 2 : 1;
+    const settings = CJRM.getState().settings || {};
+    let body = "";
+    if (step === 1 && native) {
+      const st = ui.phoneStatus || {};
+      const ok = phonePermsGranted(st);
+      const smsOk = Boolean(st.smsReceiveGranted && st.smsReadGranted);
+      const contactsOk = Boolean(st.contactsGranted);
+      const denied = ui.phoneStatus && !ok;
+      body = "<h1>Connect your phone</h1>" +
+        "<p class='lede why'>CJRM reads incoming texts so new leads land on your desk, and uses contacts so a name shows instead of just a number.</p>" +
+        '<ul class="perm-status">' +
+        "<li>" + (smsOk ? '<span class="status-ok">Texts allowed</span>' : "<span>Texts not allowed yet</span>") + "</li>" +
+        "<li>" + (contactsOk ? '<span class="status-ok">Contacts allowed</span>' : "<span>Contacts not allowed yet</span>") + "</li>" +
+        "</ul>" +
+        '<button type="button" class="btn" id="btnOnboardAllow">' + (denied ? "Retry permissions" : "Allow texts and contacts") + "</button>" +
+        (denied ? '<button type="button" class="btn-secondary" id="btnOnboardSettings">Open settings</button>' +
+          "<p class='lede'>If the phone said no, open settings, allow Contacts and SMS, then come back and retry.</p>" : "") +
+        "<p class='lede'>Optional: file texts from a VoIP app as the Toronto number.</p>" +
+        '<button type="button" class="btn-ghost" id="btnOnboardVoip">Optional: allow notification access</button>' +
+        '<button type="button" class="btn" id="btnOnboardPhoneNext"' + (ok ? "" : " disabled") + ">Continue</button>";
+    } else if (step === 1) {
+      body = "<h1>Connect your phone</h1>" +
+        "<p class='lede why'>Install the Android app for texts. The app can read incoming SMS and use contacts to put a name on a number. This browser cannot do that.</p>" +
+        "<p class='lede'>You can continue here to connect your email. Texts will file once you install the Android app.</p>" +
+        '<button type="button" class="btn" id="btnOnboardPhoneNext">Continue to email</button>';
+    } else {
+      const ok = Boolean(ui.hubTestOk);
+      const err = ui.hubTestError ? "<p class='status-bad' id='onboardHubError'>" + esc(ui.hubTestError) + "</p>" : "";
+      const green = ok ? '<p class="status-ok" id="onboardHubOk">Mailbox connected</p>' : "";
+      body = "<h1>Connect your email</h1>" +
+        "<p class='lede why'>Paste the mailbox hub URL and the same secret you set in the Apps Script. CJRM will check the connection before opening the desk.</p>" +
+        '<label class="field"><span>Hub URL</span><input id="onboardHubUrl" type="url" autocomplete="off" value="' + esc(settings.hubUrl || "") + '"></label>' +
+        '<label class="field"><span>Shared secret</span><input id="onboardHubSecret" type="password" autocomplete="off" value="' + esc(settings.hubSecret || "") + '"></label>' +
+        '<button type="button" class="btn-secondary" id="btnOnboardTestHub">Test connection</button>' +
+        green + err +
+        '<button type="button" class="btn" id="btnOnboardFinish"' + (ok ? "" : " disabled") + ">Open the desk</button>";
+    }
+    return '<div class="onboard" id="onboard">' +
+      '<p class="onboard-step">Step ' + step + " of 2</p>" +
+      body +
+      "</div>";
+  }
 
   function renderDesk() {
     const state = CJRM.getState();
@@ -200,9 +420,10 @@
       const stageMeta = CJRM.STAGE_META[p.stage] || { name: p.stage || "" };
       const subject = String(p.listing || "").trim();
       const showSubject = subject && subject.toLowerCase() !== String(p.name || "").toLowerCase();
-      return '<li class="swipe-item" data-person-swipe="' + esc(p.id) + '">' +
-        '<div class="swipe-actions"><button type="button" class="btn-swipe-del" data-del-person="' + esc(p.id) + '">Delete</button></div>' +
+      const selected = ui.selecting === "desk" && ui.selected[p.id] ? " is-selected" : "";
+      return '<li class="swipe-item' + selected + '" data-person-swipe="' + esc(p.id) + '">' +
         '<button type="button" class="' + cls + '" data-open="' + esc(p.id) + '">' +
+        '<span class="select-check" aria-hidden="true"></span>' +
         '<span class="' + badgeClass(badgeChannel) + '">' + esc(badgeLabel) + "</span>" +
         '<span class="lead-body"><p class="lead-name">' + esc(p.name) +
         (p.starred ? ' <span class="dot-unread" title="Starred" style="background:var(--wood)"></span>' : "") +
@@ -221,8 +442,8 @@
     }
 
     if (!state.people.length) {
-      return '<div class="empty"><h2>The desk is clear</h2>' +
-        "<p>Add a lead by hand, or file a mailbox batch from the Add tab. You can also load the demo data from More.</p>" +
+      return '<div class="empty empty-desk"><h2>Waiting for your first message</h2>' +
+        "<p>New leads from your mailbox and, in the Android app, from texts will land here.</p>" +
         '<button type="button" class="btn" id="btnGotoAdd">Add a lead</button></div>';
     }
     if (!sorted.length) {
@@ -321,8 +542,9 @@
     const bubbles = thread.map(function (m) {
       const meta = CJRM.CHANNEL_META[m.channel] || {};
       const who = m.direction === "note" ? "Note" : (m.direction === "out" ? "You" : (person.name || "Them")) + " · " + (CJRM.sourceLabel ? CJRM.sourceLabel(m.channel) : (meta.name || ""));
-      return '<div class="swipe-item bubble-wrap ' + m.direction + '" data-msg-swipe="' + esc(m.id) + '">' +
-        '<div class="swipe-actions"><button type="button" class="btn-swipe-del" data-del-msg="' + esc(m.id) + '">Delete</button></div>' +
+      const selected = ui.selecting === "thread" && ui.selected[m.id] ? " is-selected" : "";
+      return '<div class="swipe-item bubble-wrap ' + m.direction + selected + '" data-msg-swipe="' + esc(m.id) + '">' +
+        '<span class="select-check" aria-hidden="true"></span>' +
         '<article class="bubble ' + m.direction + '"><p class="who">' + esc(who) + "</p><p>" + esc(m.body) +
         "</p><time datetime=\"" + esc(m.at) + '">' + esc(CJRM.formatWhen(m.at)) + "</time></article></div>";
     }).join("") || "<p class='lede'>No messages yet. Log a call or write a reply below.</p>";
@@ -560,10 +782,9 @@
       '<label class="btn-secondary" style="display:inline-flex"><input type="file" id="importFile" accept="application/json,.json" hidden>Import desk</label></div>' +
       "</div>" +
       '<div class="card stack">' +
-      "<h2 style='margin-top:0'>Demo data</h2>" +
-      "<p class='lede'>The sample desk uses fictional 555 numbers and example.com addresses. It is clearly marked as demo data.</p>" +
-      '<div class="row"><button type="button" class="btn-wood" id="btnLoadDemo">Load demo data</button>' +
-      '<button type="button" class="btn-danger" id="btnClearDesk">Clear the desk</button></div>' +
+      "<h2 style='margin-top:0'>Desk</h2>" +
+      "<p class='lede'>Clear every person and message stored on this device. This does not change your mailbox.</p>" +
+      '<button type="button" class="btn-danger" id="btnClearDesk">Clear the desk</button>' +
       "</div>" +
       '<div class="card stack">' +
       "<h2 style='margin-top:0'>Install</h2>" +
@@ -620,37 +841,16 @@
     });
   }
 
-  function deletePersonCard(id) {
-    const person = CJRM.personById(id);
-    const label = person && person.name ? person.name : "this person";
-    if (!confirm("Remove " + label + " and their thread from this device?")) return;
-    CJRM.removePerson(id);
-    if (ui.personId === id) ui.personId = null;
-    setView("desk");
-  }
-
-  function deleteThreadMessage(id) {
-    if (!confirm("Delete this message from the thread?")) return;
-    CJRM.removeMessage(id);
-    render();
-  }
-
-  function bindSwipeAndLongPress(el, onDelete) {
+  function bindItemGestures(el, kind, id) {
     const handle = el.querySelector("[data-open], .bubble") || el;
     const HOLD_MS = 500;
     const MOVE_CANCEL = 10;
-    const SWIPE_DX = -60;
-    let startX = 0, startY = 0, tracking = false, longTimer = null;
-    let armed = false, cancelled = false, gesturing = false, lastOpened = false, capturedId = null, suppressClick = false;
+    let startX = 0, startY = 0, startT = 0, lastX = 0, lastT = 0, lastVX = 0;
+    let tracking = false, longTimer = null, cancelled = false, gesturing = false, suppressClick = false, capturedId = null;
     let verticalScroll = false, scrollTarget = null, lastY = 0;
 
     function clearTimer() {
       if (longTimer) { clearTimeout(longTimer); longTimer = null; }
-    }
-
-    function resetTransform() {
-      handle.style.transition = "";
-      handle.style.transform = "";
     }
 
     function releaseCapture() {
@@ -667,70 +867,86 @@
         if ((oy === "auto" || oy === "scroll" || oy === "overlay") && n.scrollHeight > n.clientHeight + 1) return n;
         n = n.parentElement;
       }
-      return document.scrollingElement || document.documentElement;
+      return document.querySelector("main#view") || document.scrollingElement || document.documentElement;
     }
 
-    function cancelArm() {
-      clearTimer();
-      armed = false;
-      cancelled = true;
-      releaseCapture();
-      if (!lastOpened) {
-        el.classList.remove("is-open");
-        resetTransform();
+    function snapBack() {
+      handle.style.transition = "";
+      handle.style.transform = "";
+      handle.style.opacity = "";
+    }
+
+    function commitSwipe() {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      function go() {
+        if (kind === "desk") deletePeopleWithUndo([id]);
+        else deleteMessagesWithUndo([id]);
       }
+      if (reduce) { go(); return; }
+      handle.style.transition = "transform 0.2s ease-out, opacity 0.2s ease-out";
+      handle.style.transform = "translateX(-110%)";
+      handle.style.opacity = "0";
+      el.classList.add("is-dismissing");
+      setTimeout(go, 200);
     }
 
     handle.addEventListener("pointerdown", function (e) {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      startX = e.clientX;
+      startX = lastX = e.clientX;
       startY = e.clientY;
+      startT = lastT = (typeof performance !== "undefined" ? performance.now() : Date.now());
+      lastVX = 0;
       tracking = true;
-      armed = false;
       cancelled = false;
       gesturing = false;
       suppressClick = false;
       verticalScroll = false;
       scrollTarget = null;
       lastY = e.clientY;
-      lastOpened = el.classList.contains("is-open");
       clearTimer();
       longTimer = setTimeout(function () {
         longTimer = null;
         if (!tracking || cancelled) return;
-        armed = true;
-        if (navigator.vibrate) navigator.vibrate(12);
+        suppressClick = true;
+        const mode = kind === "desk" ? "desk" : "thread";
+        if (!ui.selecting) enterSelect(mode, id);
+        else if (ui.selecting === mode) {
+          toggleSelect(id);
+          if (navigator.vibrate) navigator.vibrate(12);
+        }
       }, HOLD_MS);
     });
     handle.addEventListener("pointermove", function (e) {
       if (!tracking) return;
+      const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
+      const dt = now - lastT;
+      if (dt > 0) lastVX = (e.clientX - lastX) / dt;
+      lastX = e.clientX;
+      lastT = now;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       const adx = Math.abs(dx), ady = Math.abs(dy);
-      // After a hold, the browser often will not start a native pan. Keep scrolling
-      // the nearest overflow container so a vertical move never sticks or arms delete.
       if (verticalScroll && scrollTarget) {
         scrollTarget.scrollTop += lastY - e.clientY;
         lastY = e.clientY;
         return;
       }
-      if (cancelled) return;
-      if (!armed) {
-        if (adx > MOVE_CANCEL || ady > MOVE_CANCEL) {
-          suppressClick = true;
-          cancelArm();
-        }
-        return;
+      if (adx > MOVE_CANCEL || ady > MOVE_CANCEL) {
+        clearTimer();
+        cancelled = true;
       }
       if (ady > MOVE_CANCEL && ady >= adx) {
         suppressClick = true;
+        gesturing = true;
         verticalScroll = true;
         lastY = e.clientY;
         scrollTarget = scrollParentOf(el);
-        cancelArm();
+        releaseCapture();
+        snapBack();
         if (scrollTarget) scrollTarget.scrollTop += -dy;
         return;
       }
+      if (ui.selecting) return;
       if (adx > 2 * ady && dx < 0) {
         gesturing = true;
         suppressClick = true;
@@ -738,79 +954,130 @@
           try { handle.setPointerCapture(e.pointerId); capturedId = e.pointerId; } catch (err) {}
         }
         if (e.cancelable) e.preventDefault();
-        closeOpenSwipes(el);
-        const shift = Math.max(-88, Math.min(0, lastOpened ? dx - 88 : dx));
         handle.style.transition = "none";
-        handle.style.transform = "translateX(" + shift + "px)";
-        if (dx < SWIPE_DX && adx > 2 * ady) el.classList.add("is-open");
-        else if (!lastOpened) el.classList.remove("is-open");
+        handle.style.transform = "translateX(" + Math.max(-el.getBoundingClientRect().width, dx) + "px)";
       }
     }, { passive: false });
     function endPointer(e) {
       if (!tracking) return;
       tracking = false;
       clearTimer();
+      releaseCapture();
       const dx = e && e.clientX != null ? e.clientX - startX : 0;
       const dy = e && e.clientY != null ? e.clientY - startY : 0;
-      const held = armed && !cancelled;
-      const reveal = held && dx < SWIPE_DX && Math.abs(dx) > 2 * Math.abs(dy);
-      releaseCapture();
-      handle.style.transition = "";
-      handle.style.transform = "";
-      if (reveal) {
-        gesturing = true;
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+      const width = el.getBoundingClientRect().width || 1;
+      const horizontal = adx > 2 * ady && dx < 0;
+      const farEnough = dx <= -0.35 * width;
+      const fling = lastVX < -0.65 && adx > 20;
+      if (!ui.selecting && !verticalScroll && horizontal && (farEnough || fling)) {
         suppressClick = true;
-        el.classList.add("is-open");
-      } else if (!lastOpened) {
-        el.classList.remove("is-open");
+        gesturing = true;
+        commitSwipe();
+        return;
       }
-      // A completed hold is not a tap, so the desk card does not open.
-      if (held) suppressClick = true;
-      armed = false;
+      snapBack();
     }
     handle.addEventListener("pointerup", endPointer);
     handle.addEventListener("pointercancel", endPointer);
     handle.addEventListener("click", function (e) {
-      if (gesturing || suppressClick || el.classList.contains("is-open") || lastOpened) {
+      if (gesturing || suppressClick) {
         e.preventDefault();
         e.stopPropagation();
-        if (lastOpened && !gesturing) el.classList.remove("is-open");
         gesturing = false;
         suppressClick = false;
+        return;
+      }
+      if (ui.selecting) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSelect(id);
       }
     }, true);
   }
 
-  function bindSwipeDeletes(view) {
+  function bindItemGesturesAll(view) {
     closeOpenSwipes(null);
     view.querySelectorAll("[data-person-swipe]").forEach(function (el) {
-      const id = el.getAttribute("data-person-swipe");
-      bindSwipeAndLongPress(el, function () { deletePersonCard(id); });
+      bindItemGestures(el, "desk", el.getAttribute("data-person-swipe"));
     });
     view.querySelectorAll("[data-msg-swipe]").forEach(function (el) {
-      const id = el.getAttribute("data-msg-swipe");
-      bindSwipeAndLongPress(el, function () { deleteThreadMessage(id); });
+      bindItemGestures(el, "thread", el.getAttribute("data-msg-swipe"));
     });
-    view.querySelectorAll("[data-del-person]").forEach(function (btn) {
-      btn.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        deletePersonCard(btn.getAttribute("data-del-person"));
-      });
+  }
+
+  function bindOnboard() {
+    const native = typeof CJRM.isNativeApp === "function" && CJRM.isNativeApp();
+    if (native && ui.onboardStep === 1 && !ui.phoneStatus && typeof CJRM.nativeGetStatus === "function") {
+      CJRM.nativeGetStatus().then(function (st) {
+        ui.phoneStatus = st || {};
+        render();
+      }).catch(function () { ui.phoneStatus = {}; render(); });
+    }
+    const allow = $("btnOnboardAllow");
+    if (allow) allow.addEventListener("click", async function () {
+      try {
+        const st = await CJRM.nativeRequestPhonePermissions();
+        ui.phoneStatus = st || {};
+      } catch (err) {
+        ui.phoneStatus = ui.phoneStatus || {};
+      }
+      render();
     });
-    view.querySelectorAll("[data-del-msg]").forEach(function (btn) {
-      btn.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        deleteThreadMessage(btn.getAttribute("data-del-msg"));
+    const settingsBtn = $("btnOnboardSettings");
+    if (settingsBtn) settingsBtn.addEventListener("click", function () {
+      if (typeof CJRM.nativeOpenAppInfo === "function") CJRM.nativeOpenAppInfo().catch(function () {});
+    });
+    const voip = $("btnOnboardVoip");
+    if (voip) voip.addEventListener("click", function () {
+      if (typeof CJRM.nativeOpenNotificationAccess === "function") CJRM.nativeOpenNotificationAccess().catch(function () {});
+    });
+    const phoneNext = $("btnOnboardPhoneNext");
+    if (phoneNext) phoneNext.addEventListener("click", function () {
+      const web = !native;
+      if (!web && !phonePermsGranted(ui.phoneStatus)) return;
+      ui.onboardStep = 2;
+      render();
+    });
+    const testBtn = $("btnOnboardTestHub");
+    if (testBtn) testBtn.addEventListener("click", async function () {
+      const url = ($("onboardHubUrl") && $("onboardHubUrl").value.trim()) || "";
+      const secret = ($("onboardHubSecret") && $("onboardHubSecret").value.trim()) || "";
+      ui.hubTestOk = false;
+      ui.hubTestError = "";
+      CJRM.setState({
+        settings: Object.assign({}, CJRM.getState().settings, { hubUrl: url, hubSecret: secret })
       });
+      try {
+        if (typeof CJRM.nativeSetHubConfig === "function") {
+          CJRM.nativeSetHubConfig(url, secret).catch(function () {});
+        }
+        await CJRM.pollHub();
+        ui.hubTestOk = true;
+      } catch (err) {
+        ui.hubTestOk = false;
+        ui.hubTestError = (err && err.message) ? err.message : "Could not reach the mailbox.";
+      }
+      render();
+    });
+    const finish = $("btnOnboardFinish");
+    if (finish) finish.addEventListener("click", function () {
+      if (!ui.hubTestOk) return;
+      const url = ($("onboardHubUrl") && $("onboardHubUrl").value.trim()) || "";
+      const secret = ($("onboardHubSecret") && $("onboardHubSecret").value.trim()) || "";
+      CJRM.setState({
+        settings: Object.assign({}, CJRM.getState().settings, { onboarded: true, hubUrl: url, hubSecret: secret })
+      });
+      if (typeof CJRM.startAutoPoll === "function") CJRM.startAutoPoll();
+      setView("desk");
     });
   }
 
   function bind() {
     const view = $("view");
-    bindSwipeDeletes(view);
+    bindItemGesturesAll(view);
     bindComposer();
+    if (ui.view === "onboard") bindOnboard();
 
     view.querySelectorAll("[data-filter]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -833,7 +1100,11 @@
       });
     }
     view.querySelectorAll("[data-open]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
+      btn.addEventListener("click", function (e) {
+        if (ui.selecting) {
+          e.preventDefault();
+          return;
+        }
         const id = btn.getAttribute("data-open");
         CJRM.patchPerson(id, { unread: false, freshAt: null });
         ui.personTab = "thread";
@@ -841,7 +1112,10 @@
       });
     });
     if ($("btnGotoAdd")) $("btnGotoAdd").addEventListener("click", function () { setView("add"); });
-    if ($("btnBackDesk")) $("btnBackDesk").addEventListener("click", function () { setView("desk"); });
+    if ($("btnBackDesk")) $("btnBackDesk").addEventListener("click", function () {
+      if (ui.selecting) { exitSelect(); return; }
+      setView("desk");
+    });
 
     view.querySelectorAll("[data-ptab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -1153,7 +1427,16 @@
   }
 
   function wireShell() {
-    $("btnHome").addEventListener("click", function () { setView("desk"); });
+    $("btnHome").addEventListener("click", function () {
+      if (ui.selecting) { exitSelect(); return; }
+      setView("desk");
+    });
+    window.addEventListener("popstate", function () {
+      if (ui.selecting) exitSelect(true);
+    });
+    if ($("btnSelectCancel")) $("btnSelectCancel").addEventListener("click", function () { exitSelect(); });
+    if ($("btnSelectAll")) $("btnSelectAll").addEventListener("click", function () { selectAllVisible(); });
+    if ($("btnSelectDelete")) $("btnSelectDelete").addEventListener("click", function () { deleteSelected(); });
     if ($("newCount")) $("newCount").addEventListener("click", function () { setView("desk"); });
     document.querySelectorAll(".tabbar [data-view]").forEach(function (btn) {
       btn.addEventListener("click", function () { setView(btn.getAttribute("data-view")); });
@@ -1182,14 +1465,19 @@
   CJRM.clearNewBadge = clearNewBadge;
   CJRM.revealFiledOnDesk = revealFiledOnDesk;
   CJRM.messageToast = messageToast;
+  CJRM.isOnboarded = isOnboarded;
 
   CJRM.start = function () {
     CJRM.hydrate();
+    if (!isOnboarded()) {
+      ui.view = "onboard";
+      ui.onboardStep = 1;
+    }
     wireShell();
     render();
     offerInstall(false);
     startClock();
-    if (typeof CJRM.startAutoPoll === "function") CJRM.startAutoPoll();
+    if (isOnboarded() && typeof CJRM.startAutoPoll === "function") CJRM.startAutoPoll();
     if (CJRM.isNativeApp && CJRM.isNativeApp()) {
       if (typeof CJRM.nativeStart === "function") CJRM.nativeStart();
     } else if ("serviceWorker" in navigator) {

@@ -15,11 +15,15 @@ On the Android phone:
 1. Open the link in Chrome (not a Facebook or Instagram in-app browser).
 2. Tap the Chrome menu (three dots), then **Install app** or **Add to Home screen**.
 3. The icon is the CJ stamp. Open CJRM from the home screen.
-4. On first open you will see **Demo data** — fictional leads with 555 numbers, so you can try the desk. When you are ready for real work, go to **More** and tap **Clear the desk**.
+4. The first open is a short setup wizard. The desk starts empty — there are no sample leads.
+   - In the browser, step 1 says **Install the Android app for texts**. You can continue to email from here.
+   - In the Android app, step 1 is **Connect your phone**. Allow **Contacts** (so a name can show on a number) and **SMS** (so new texts land on the desk). If the phone says no, tap **Retry** or **Open settings**, allow both, and come back. You cannot continue without them. You may also turn on notification access for the Toronto VoIP number on this step; that part is optional.
+   - Step 2 is **Connect your email**. Paste the mailbox hub URL and the same secret you set in the Apps Script. Tap **Test connection**. Wait for the green **Mailbox connected** line, then tap **Open the desk**.
+5. The desk should say **Waiting for your first message**.
 
-To confirm the version, open **More**. It should say **Version 1.1.5**.
+To confirm the version after setup, open **More**. It should say **Version 1.1.6**.
 
-If you are using the Android app file (CJRM-v1.1.5.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
+If you are using the Android app file (CJRM-v1.1.6.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
 
 
 ## 2. Install the mailbox hub (Google Apps Script)
@@ -39,7 +43,7 @@ Johnny's email is the hub. Kijiji replies, Facebook and Instagram “someone sen
    - Who has access: **Anyone** (the secret still protects it)
 6. Authorize the script when Google asks (Gmail read + labels).
 7. Copy the web-app URL.
-8. In CJRM on the phone, open **More**. Paste the URL and the same secret. Fill in the Winnipeg and Toronto numbers if you have them. Tap **Save hub settings**. The desk starts checking the mailbox on its own (every 30 seconds while it is open). You can still tap **Check mailbox now** if you want an extra check.
+8. If you already connected the hub in the first-run wizard, you can skip this. Otherwise, in CJRM on the phone, open **More**. Paste the URL and the same secret. Fill in the Winnipeg and Toronto numbers if you have them. Tap **Save hub settings**. The desk starts checking the mailbox on its own (every 30 seconds while it is open). You can still tap **Check mailbox now** if you want an extra check.
 
 If the check fails, confirm the secret matches and that the deployment is a Web app, not a library. After you edit `Code.gs`, make a **New version** of the same deployment or the phone will still call the old one.
 
@@ -62,7 +66,7 @@ WhatsApp notices work the same way if he forwards them, or he can log them by ha
 ## 4. Daily use
 
 - The home screen is one vertical list. Anything unanswered for two hours, or with a follow-up due, pins at the top with a timer.
-- To remove a person from the Desk, or any message in a thread, press and hold, then swipe left and tap **Delete**.
+- To remove a person from the Desk, or any message in a thread, swipe left. A toast lets you **Undo** for five seconds. Press and hold to select several, then **Delete**.
 - Open a person to see the whole thread across every channel. The **File** tab holds the stage (New lead → Contacted → Quote sent → Booked → Done / Lost), notes, photos, and the +2 days follow-up chip.
 - Quick replies live on the thread. **Copy reply**, then paste into Kijiji, Messenger, or Messages. **Open in app** starts a call, SMS, WhatsApp, Messenger, or Instagram thread when a number or handle is on file. **Log as sent** keeps the desk in sync.
 - **Add** is for a new lead or a pasted mailbox batch. **More** is for the hub, templates, and backup.

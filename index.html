@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="CJRM">
 <meta name="application-name" content="CJRM">
-<meta name="cjrm-version" content="1.1.5">
+<meta name="cjrm-version" content="1.1.6">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
@@ -36,6 +36,14 @@
     <button class="btn-ghost" type="button" id="btnInstall" hidden>Install</button>
   </div>
 </header>
+<div class="select-bar" id="selectBar" hidden>
+  <button type="button" class="icon-btn" id="btnSelectCancel" aria-label="Cancel selection">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <p class="select-count" id="selectCount">0 selected</p>
+  <button type="button" class="btn-ghost" id="btnSelectAll">Select all</button>
+  <button type="button" class="btn" id="btnSelectDelete">Delete</button>
+</div>
 <div class="demo-banner" id="demoBanner" hidden>
   <strong>Demo data</strong> — fictional leads for testing, not real clients.
   <button type="button" id="btnDismissDemo">Hide</button>

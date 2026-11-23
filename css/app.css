@@ -120,6 +120,33 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   align-items: center;
   gap: 0.4rem;
 }
+.select-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--header-h);
+  padding: 0.4rem 0.7rem;
+  padding-top: max(0.4rem, env(safe-area-inset-top));
+  background: #141918;
+  border-bottom: 3px solid var(--stamp);
+}
+.select-bar[hidden] { display: none !important; }
+body.is-selecting .app-header { display: none; }
+body.is-onboarding .tabbar { display: none; }
+body.is-onboarding main#view { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+.select-count {
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex: 1;
+}
+.select-bar .btn { min-height: 44px; padding: 0.4rem 0.8rem; }
+.select-bar .btn-ghost { min-height: 44px; }
 .pin-count {
   font-family: var(--cond);
   font-weight: 700;
@@ -385,6 +412,40 @@ main#view.person-mode .composer { flex: 0 0 auto; }
 .swipe-item.is-open > .lead,
 .swipe-item.is-open > .bubble { transform: translateX(-5.5rem); }
 .swipe-item > .lead.is-pinned { background: #23191a; }
+.swipe-item .select-check {
+  display: none;
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  z-index: 2;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: -0.625rem;
+  border: 2px solid var(--muted);
+  border-radius: 999px;
+  background: var(--bg);
+  pointer-events: none;
+}
+body.is-selecting .swipe-item .select-check { display: block; }
+body.is-selecting .swipe-item > .lead,
+body.is-selecting .swipe-item > .bubble { padding-left: 2.4rem; }
+.swipe-item.is-selected { background: #23191a; }
+.swipe-item.is-selected .select-check {
+  background: var(--stamp);
+  border-color: var(--stamp);
+}
+.swipe-item.is-selected .select-check::after {
+  content: "";
+  position: absolute;
+  left: 0.28rem;
+  top: 0.08rem;
+  width: 0.35rem;
+  height: 0.6rem;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.swipe-item.is-dismissing { pointer-events: none; }
 .bubble-wrap {
   max-width: 92%;
   align-self: flex-start;
@@ -846,6 +907,61 @@ input.field, select.field, textarea.field {
   z-index: 40;
   max-width: 90%;
 }
+.toast-undo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+}
+.toast-undo-btn {
+  min-height: 44px;
+  padding: 0 0.7rem;
+  background: transparent;
+  color: var(--wood);
+  font-family: var(--cond);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.onboard {
+  padding: 1.25rem 1.1rem 2rem;
+  max-width: 28rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.onboard-step {
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.onboard h1 {
+  margin: 0;
+  font-family: var(--slab);
+  font-weight: 400;
+  font-size: 1.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.onboard .why { margin: 0; color: var(--ink); }
+.onboard .lede { margin: 0; }
+.onboard .btn, .onboard .btn-secondary, .onboard .btn-ghost { width: 100%; }
+.onboard .btn[disabled] { opacity: 0.45; }
+.perm-status {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.perm-status li { font-weight: 600; }
 .status-ok { color: var(--green); }
 .status-bad { color: var(--danger); }
 

@@ -1,8 +1,15 @@
 package com.carpenterjohnny.cjrm;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.ContactsContract;
 import android.content.SharedPreferences;
 import android.util.Log;
+
+import androidx.core.content.ContextCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -54,14 +61,40 @@ final class NativeInbox {
         return digits.isEmpty() ? raw.trim() : digits;
     }
 
+    static String contactName(Context ctx, String number) {
+        if (ctx == null || number == null || number.trim().isEmpty()) return "";
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            return "";
+        }
+        Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number));
+        try (Cursor cursor = ctx.getContentResolver().query(
+                uri,
+                new String[] { ContactsContract.PhoneLookup.DISPLAY_NAME },
+                null,
+                null,
+                null
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                String name = cursor.getString(0);
+                if (name != null && !name.trim().isEmpty()) return name.trim();
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
     static JSONObject smsMessage(String sender, String body, long dateMs) {
+        return smsMessage(null, sender, body, dateMs);
+    }
+
+    static JSONObject smsMessage(Context ctx, String sender, String body, long dateMs) {
         JSONObject o = new JSONObject();
         try {
+            String name = contactName(ctx, sender);
             o.put("id", smsId(sender, dateMs, body));
             o.put("source", "sms");
             o.put("from", sender == null ? "" : sender);
             o.put("phone", sender == null ? "" : sender);
-            o.put("name", sender == null ? "" : sender);
+            o.put("name", name.isEmpty() ? (sender == null ? "" : sender) : name);
             o.put("body", body == null ? "" : body);
             o.put("date", toIso(dateMs));
         } catch (Exception ignored) {}

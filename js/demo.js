@@ -35,6 +35,8 @@
     "The side gate is dragging. Can you fix the hinge this week? — Ruth's son",
   ].join("\n");
 
+  CJRM.DEMO_PERSON_IDS = ["lead-guest","lead-mara","lead-owen","lead-devon","lead-priya","lead-amira","lead-casey","lead-jules","lead-samir","lead-ruth","lead-lena"];
+
   CJRM.buildDemo = function (now) {
     const t = now == null ? Date.now() : now;
     const accounts = (CJRM.CHANNELS || []).map(function (channel) {
@@ -332,6 +334,7 @@
       msg("m21", "lead-lena", "out", "phone2", "Got it, Lena. We'll be there Tuesday 8–10.", ago(t, 118)),
     ];
 
+    people.forEach(function (p) { p.demo = true; });
     return {
       demo: true,
       operator: "Carpenter Johnny",

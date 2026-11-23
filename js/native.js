@@ -90,6 +90,20 @@
     return p.requestSmsPermission();
   }
 
+  async function requestPhonePermissions() {
+    const p = plugin();
+    if (!p) throw new Error("Not running as the Android app.");
+    if (typeof p.requestPhonePermissions === "function") return p.requestPhonePermissions();
+    return p.requestSmsPermission();
+  }
+
+  async function lookupContactName(phone) {
+    const p = plugin();
+    if (!p || typeof p.lookupContactName !== "function") return "";
+    const res = await p.lookupContactName({ phone: phone || "" });
+    return (res && res.name) || "";
+  }
+
   async function openAppInfo() {
     const p = plugin();
     if (!p) throw new Error("Not running as the Android app.");
@@ -169,6 +183,8 @@
   CJRM.nativeDrainAndFile = drainAndFile;
   CJRM.nativeGetStatus = getStatus;
   CJRM.nativeRequestSmsPermission = requestSmsPermission;
+  CJRM.nativeRequestPhonePermissions = requestPhonePermissions;
+  CJRM.nativeLookupContactName = lookupContactName;
   CJRM.nativeOpenAppInfo = openAppInfo;
   CJRM.nativeOpenNotificationAccess = openNotificationAccess;
   CJRM.nativeListApps = listApps;

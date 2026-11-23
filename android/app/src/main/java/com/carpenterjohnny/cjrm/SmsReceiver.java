@@ -46,7 +46,7 @@ public class SmsReceiver extends BroadcastReceiver {
             String body = entry.getValue().toString().trim();
             if (body.isEmpty()) continue;
             long when = times.containsKey(entry.getKey()) ? times.get(entry.getKey()) : System.currentTimeMillis();
-            JSONObject message = NativeInbox.smsMessage(entry.getKey(), body, when);
+            JSONObject message = NativeInbox.smsMessage(context, entry.getKey(), body, when);
             NativeInbox.append(context.getApplicationContext(), message);
             CjrmNativePlugin.emit(message);
         }
