@@ -61,7 +61,8 @@
     if (!pieces.length) return { filed: 0, fetched: 0, results: [] };
     const result = CJRM.filePieces(pieces);
     if (result.filed && !(opts && opts.silent) && typeof CJRM.notifyNewItems === "function") {
-      CJRM.notifyNewItems(result.filed);
+      const names = (result.results || []).map(function (row) { return row && row.name; }).filter(Boolean);
+      CJRM.notifyNewItems(result.filed, names);
     } else if (typeof CJRM.refresh === "function") {
       CJRM.refresh();
     }

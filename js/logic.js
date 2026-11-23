@@ -123,9 +123,18 @@
     return new Date(person.lastMessageAt || person.createdAt).getTime();
   }
 
+  function isFresh(person) {
+    return Boolean(person && person.freshAt);
+  }
+
   function sortPeople(people, messages, now) {
     const t = nowMs(now);
     return people.slice().sort(function (a, b) {
+      const fa = isFresh(a);
+      const fb = isFresh(b);
+      if (fa && !fb) return -1;
+      if (!fa && fb) return 1;
+      if (fa && fb) return String(b.freshAt || "").localeCompare(String(a.freshAt || ""));
       const sa = slipOf(a, messages, t);
       const sb = slipOf(b, messages, t);
       if (sa && !sb) return -1;
@@ -487,6 +496,7 @@
   CJRM.spoken = spoken;
   CJRM.lastSpoken = lastSpoken;
   CJRM.slipOf = slipOf;
+  CJRM.isFresh = isFresh;
   CJRM.slipTimer = slipTimer;
   CJRM.isWaiting = isWaiting;
   CJRM.channelsUsed = channelsUsed;

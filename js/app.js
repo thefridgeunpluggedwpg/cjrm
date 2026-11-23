@@ -61,13 +61,32 @@
     paintNewBadge();
   }
 
-  function notifyNewItems(filed) {
+  function messageToast(filed, names) {
+    const n = Number(filed) || 0;
+    const unique = [];
+    (names || []).forEach(function (name) {
+      const label = String(name || "").trim();
+      if (label && unique.indexOf(label) === -1) unique.push(label);
+    });
+    if (n === 1 && unique[0]) return "1 new message from " + unique[0];
+    if (n > 1 && unique.length === 1) return n + " new messages from " + unique[0];
+    if (unique.length === 2) return n + " new messages from " + unique[0] + " and " + unique[1];
+    if (unique.length > 2) return n + " new messages from " + unique[0] + " and " + (unique.length - 1) + " others";
+    return n === 1 ? "1 new message on the desk." : n + " new messages on the desk.";
+  }
+
+  function notifyNewItems(filed, names) {
     const n = Number(filed) || 0;
     if (n <= 0) return;
     pendingNewCount += n;
-    toast(n === 1 ? "New item on the desk." : n + " new items on the desk.");
+    toast(messageToast(n, names));
     paintNewBadge();
     if (typeof CJRM.refresh === "function") CJRM.refresh();
+  }
+
+  function revealFiledOnDesk() {
+    ui.filter = { kind: "open" };
+    ui.query = "";
   }
 
   function setView(name, personId) {
@@ -125,11 +144,15 @@
     const state = CJRM.getState();
     const now = CJRM.now();
     const filtered = state.people.filter(function (p) {
+      if (CJRM.isFresh && CJRM.isFresh(p) && (!ui.query || CJRM.matchesFilter(p, state.messages, { kind: "all" }, now, ui.query))) {
+        return ui.filter.kind !== "channel" && ui.filter.kind !== "stage" ? true : CJRM.matchesFilter(p, state.messages, ui.filter, now, ui.query);
+      }
       return CJRM.matchesFilter(p, state.messages, ui.filter, now, ui.query);
     });
     const sorted = CJRM.sortPeople(filtered, state.messages, now);
-    const pinned = sorted.filter(function (p) { return CJRM.slipOf(p, state.messages, now); });
-    const rest = sorted.filter(function (p) { return !CJRM.slipOf(p, state.messages, now); });
+    const fresh = sorted.filter(function (p) { return CJRM.isFresh && CJRM.isFresh(p); });
+    const pinned = sorted.filter(function (p) { return !CJRM.isFresh(p) && CJRM.slipOf(p, state.messages, now); });
+    const rest = sorted.filter(function (p) { return !CJRM.isFresh(p) && !CJRM.slipOf(p, state.messages, now); });
     const counts = {
       open: state.people.filter(function (p) { return CJRM.matchesFilter(p, state.messages, { kind: "open" }, now, ""); }).length,
       slipping: state.people.filter(function (p) { return CJRM.matchesFilter(p, state.messages, { kind: "slipping" }, now, ""); }).length,
@@ -161,18 +184,22 @@
       const timer = slip ? CJRM.slipTimer(p, state.messages, now) : "";
       const preview = CJRM.previewText(state.messages, p.id);
       const used = CJRM.channelsUsed(p, state.messages);
-      const cls = "lead" + (slip ? " is-pinned" : "") + (p.unread ? " is-unread" : "");
+      const fresh = CJRM.isFresh && CJRM.isFresh(p);
+      const cls = "lead" + (slip ? " is-pinned" : "") + (p.unread ? " is-unread" : "") + (fresh ? " is-fresh" : "");
+      const badgeMeta = CJRM.CHANNEL_META[p.channel] || { short: "?" };
+      const stageMeta = CJRM.STAGE_META[p.stage] || { name: p.stage || "" };
       return '<li><button type="button" class="' + cls + '" data-open="' + esc(p.id) + '">' +
-        '<span class="' + badgeClass(p.channel) + '">' + esc(CJRM.CHANNEL_META[p.channel].short) + "</span>" +
+        '<span class="' + badgeClass(p.channel) + '">' + esc(badgeMeta.short) + "</span>" +
         '<span class="lead-body"><p class="lead-name">' + esc(p.name) +
         (p.starred ? ' <span class="dot-unread" title="Starred" style="background:var(--wood)"></span>' : "") +
         "</p>" +
         (preview ? '<p class="lead-preview">' + esc(preview) + "</p>" : "") +
-        '<p class="lead-meta">' + esc(CJRM.STAGE_META[p.stage].name) +
+        '<p class="lead-meta">' + esc(stageMeta.name) +
         (p.listing ? " · " + esc(p.listing) : "") +
-        (used.length > 1 ? " · " + used.map(function (c) { return CJRM.CHANNEL_META[c].short; }).join(" ") : "") +
+        (used.length > 1 ? " · " + used.map(function (c) { return (CJRM.CHANNEL_META[c] || {}).short || c; }).join(" ") : "") +
         "</p></span>" +
         '<span class="lead-side">' +
+        (fresh ? '<span class="fresh-tag">New</span>' : "") +
         (timer ? '<span class="timer' + (slip === "followup" ? " followup" : "") + '">' + esc(timer) + "</span>" : "") +
         '<span class="lead-age">' + esc(CJRM.shortAge(p.lastMessageAt, now)) + "</span>" +
         (p.unread ? '<span class="dot-unread" aria-label="Unread"></span>' : "") +
@@ -192,11 +219,14 @@
 
     let html = '<div class="desk-toolbar"><input class="search" id="search" type="search" placeholder="Search people, numbers, notes" value="' + esc(ui.query) + '"></div>' +
       '<div class="chips" role="toolbar" aria-label="Filters">' + chips + "</div>";
+    if (fresh.length) {
+      html += '<p class="section-label" id="freshLabel">New</p><ul class="list" id="freshList" aria-labelledby="freshLabel">' + fresh.map(row).join("") + "</ul>";
+    }
     if (pinned.length) {
       html += '<p class="section-label" id="pinnedLabel">Pinned — needs an answer</p><ul class="list" aria-labelledby="pinnedLabel">' + pinned.map(row).join("") + "</ul>";
     }
     if (rest.length) {
-      html += (pinned.length ? '<p class="section-label">The rest of the desk</p>' : "") +
+      html += (fresh.length || pinned.length ? '<p class="section-label">The rest of the desk</p>' : "") +
         '<ul class="list">' + rest.map(row).join("") + "</ul>";
     }
     return html;
@@ -463,9 +493,12 @@
     const state = CJRM.getState();
     const s = state.settings || {};
     const last = s.lastPollAt ? CJRM.formatWhen(s.lastPollAt) : "Never";
+    const counts = (s.lastPollOk && s.lastPollAt)
+      ? " · fetched " + Number(s.lastPollFetched || 0) + ", filed " + Number(s.lastPollFiled || 0)
+      : "";
     const status = s.lastPollAt
-      ? (s.lastPollOk ? '<p class="status-ok">Last check: ' + esc(last) + "</p>"
-        : '<p class="status-bad">Last check failed: ' + esc(s.lastPollError || last) + "</p>")
+      ? (s.lastPollOk ? '<p class="status-ok" id="hubLastCheck">Last check: ' + esc(last) + esc(counts) + "</p>"
+        : '<p class="status-bad" id="hubLastCheck">Last check failed: ' + esc(s.lastPollError || last) + "</p>")
       : "<p class='lede'>The mailbox has not been checked yet.</p>";
     const tpls = (state.templates || []).map(function (t, i) {
       return '<label class="field"><span>Template ' + (i + 1) + ' title</span><input data-ttitle="' + esc(t.id) + '" value="' + esc(t.title) + '"></label>' +
@@ -538,7 +571,7 @@
     view.querySelectorAll("[data-open]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const id = btn.getAttribute("data-open");
-        CJRM.patchPerson(id, { unread: false });
+        CJRM.patchPerson(id, { unread: false, freshAt: null });
         ui.personTab = "thread";
         setView("person", id);
       });
@@ -725,7 +758,12 @@
     if ($("btnPollNow")) $("btnPollNow").addEventListener("click", async function () {
       try {
         const r = await CJRM.pollHub();
-        toast("Checked the mailbox. Filed " + r.filed + " new " + (r.filed === 1 ? "item." : "items."));
+        if (r.filed > 0) {
+          revealFiledOnDesk();
+          notifyNewItems(r.filed, r.names);
+        } else {
+          toast("Checked the mailbox. Fetched " + r.fetched + ", filed 0.");
+        }
       } catch (err) {
         CJRM.recordPollError(err);
         toast(err.message || "Mailbox check failed.");
@@ -874,6 +912,8 @@
 
   CJRM.notifyNewItems = notifyNewItems;
   CJRM.clearNewBadge = clearNewBadge;
+  CJRM.revealFiledOnDesk = revealFiledOnDesk;
+  CJRM.messageToast = messageToast;
 
   CJRM.start = function () {
     CJRM.hydrate();

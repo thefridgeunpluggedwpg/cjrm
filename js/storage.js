@@ -42,6 +42,7 @@
       photoIds: Array.isArray(row.photoIds) ? row.photoIds.map(String) : [],
       snoozeUntil: row.snoozeUntil ? String(row.snoozeUntil) : null,
       followUpAt: row.followUpAt ? String(row.followUpAt) : null,
+      freshAt: row.freshAt ? String(row.freshAt) : null,
       createdAt: String(row.createdAt || new Date().toISOString()),
       lastMessageAt: String(row.lastMessageAt || new Date().toISOString()),
     };
@@ -214,6 +215,7 @@
       photoIds: [],
       snoozeUntil: input.snoozeUntil || null,
       followUpAt: input.followUpAt || null,
+      freshAt: input.freshAt || null,
       createdAt: at,
       lastMessageAt: at,
     };
@@ -256,16 +258,20 @@
       const channel = piece.channel || CJRM.classifyMail(piece, phones);
       const name = piece.name || CJRM.nameFromMail(piece, channel);
       const body = [piece.subject, piece.body].filter(Boolean).join("\n").trim();
-      if (!body) return;
       const sourceId = piece.id || piece.sourceId || "";
+      if (!body) {
+        results.push({ status: "skipped", sourceId: sourceId, reason: "empty", name: name, channel: channel });
+        return;
+      }
       if (sourceId && state.messages.some(function (m) { return m.sourceId && m.sourceId === sourceId; })) {
-        results.push({ status: "duplicate", sourceId: sourceId });
+        results.push({ status: "duplicate", sourceId: sourceId, name: name, channel: channel });
         return;
       }
       const extractedPhones = CJRM.extractPhones(body + " " + (piece.from || ""));
       const email = piece.email || CJRM.emailFromHeader(piece.from) || (CJRM.extractEmails(body)[0] || "");
       const phone = piece.phone || extractedPhones[0] || "";
       const existing = CJRM.matchPerson(state.people, { phone: phone, email: email, name: name, body: body });
+      const freshAt = new Date().toISOString();
       if (existing) {
         const duplicate = state.messages.some(function (m) {
           return m.personId === existing.id && m.body === body;
@@ -278,11 +284,16 @@
             at: piece.date || piece.at || new Date().toISOString(),
             sourceId: sourceId,
           });
-          if (!existing.phone && phone) patchPerson(existing.id, { phone: phone });
-          if (!existing.email && email) patchPerson(existing.id, { email: email });
-          if (CJRM.isClosed(existing)) patchPerson(existing.id, { stage: "contacted" });
+          const patch = { freshAt: freshAt, unread: true, snoozeUntil: null };
+          if (!existing.phone && phone) patch.phone = phone;
+          if (!existing.email && email) patch.email = email;
+          if (CJRM.isClosed(existing)) patch.stage = "contacted";
+          patchPerson(existing.id, patch);
+          filed += 1;
+          results.push({ status: "matched", personId: existing.id, channel: channel, sourceId: sourceId, name: existing.name || name });
+        } else {
+          results.push({ status: "duplicate", personId: existing.id, channel: channel, sourceId: sourceId, name: existing.name || name });
         }
-        results.push({ status: duplicate ? "duplicate" : "matched", personId: existing.id, channel: channel });
       } else {
         const person = newPerson({
           name: name,
@@ -293,10 +304,12 @@
           notes: "Filed from the mailbox.",
           sourceId: sourceId,
           createdAt: piece.date || piece.at,
+          freshAt: freshAt,
+          unread: true,
         }, body);
-        results.push({ status: "created", personId: person.id, channel: channel });
+        filed += 1;
+        results.push({ status: "created", personId: person.id, channel: channel, sourceId: sourceId, name: person.name });
       }
-      filed += 1;
     });
     if (opts.markDemo === false) {
       /* leave demo flag alone */

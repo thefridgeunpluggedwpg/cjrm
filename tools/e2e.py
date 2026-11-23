@@ -1,4 +1,4 @@
-"""CJRM v1.1.2 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.3 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -72,7 +72,7 @@ def main():
         page.wait_for_selector("#pinnedLabel")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.2")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.3")
         check("demo banner is visible on first load", "Demo data" in page.inner_text("#demoBanner") and page.is_visible("#demoBanner"))
         check("demo banner says fictional / not real", "fictional" in page.inner_text("#demoBanner").lower() and "not real" in page.inner_text("#demoBanner").lower())
         check("privacy: data stays on the device is described in More later or header area", True)
@@ -368,10 +368,201 @@ def main():
         check("new badge shows after items arrive", "2 new" in page.inner_text("#newCount").lower(), page.inner_text("#newCount"))
         page.evaluate("() => CJRM.clearNewBadge()")
 
+        # --- contact-form lead must appear on the desk (v1.1.3) ---
+        def handle_kyler_hub(route):
+            req = route.request
+            secret_q = req.url.split("secret=", 1)[1].split("&", 1)[0] if "secret=" in req.url else ""
+            if secret_q != "test-secret-cjrm":
+                route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": False, "error": "unauthorized"}))
+                return
+            body = {
+                "ok": True,
+                "messages": [{
+                    "id": "gmail-contact-form-kyler-1",
+                    "from": "Kyler Kuehl <kyler.kuehl@gmail.com>",
+                    "subject": "Contact form test - CJRM",
+                    "body": "Hi, this is a test lead from the website contact form. I'd like a quote on a small deck repair. Thanks!",
+                    "date": "2026-11-23T04:39:20Z",
+                    "channel": "web",
+                }],
+            }
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+        def handle_empty_hub(route):
+            req = route.request
+            secret_q = req.url.split("secret=", 1)[1].split("&", 1)[0] if "secret=" in req.url else ""
+            if secret_q != "test-secret-cjrm":
+                route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": False, "error": "unauthorized"}))
+                return
+            body = {
+                "ok": True,
+                "messages": [{
+                    "id": "gmail-empty-skip-1",
+                    "from": "Nobody <nobody@example.invalid>",
+                    "subject": "",
+                    "body": "   ",
+                    "date": "2026-11-23T04:39:20Z",
+                    "channel": "web",
+                }],
+            }
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+        page.route("**/mock-hub-kyler**", handle_kyler_hub)
+        page.route("**/mock-hub-empty**", handle_empty_hub)
+
+        case_a = page.evaluate("""async () => {
+          CJRM.getState().people.filter((p) => /kyler/i.test(p.name)).forEach((p) => CJRM.removePerson(p.id));
+          CJRM.setState({ settings: Object.assign({}, CJRM.getState().settings, {
+            hubUrl: location.origin + '/mock-hub-kyler',
+            hubSecret: 'test-secret-cjrm',
+            shopPhone: '2049553245',
+            personalPhone: '',
+            seenHubIds: [],
+          })});
+          const r = await CJRM.pollHub();
+          CJRM.revealFiledOnDesk();
+          CJRM.setView('desk');
+          const s = CJRM.getState();
+          const now = Date.now();
+          const open = CJRM.sortPeople(s.people.filter((p) => {
+            return CJRM.isFresh(p) || CJRM.matchesFilter(p, s.messages, { kind: 'open' }, now, '');
+          }), s.messages, now);
+          const first = open[0] || {};
+          const card = document.querySelector('#freshList .lead.is-fresh');
+          const kyler = s.people.find((p) => p.name === 'Kyler Kuehl');
+          return {
+            filed: r.filed,
+            status: (r.results && r.results[0] && r.results[0].status) || '',
+            channel: (r.results && r.results[0] && r.results[0].channel) || '',
+            firstName: first.name,
+            firstChannel: first.channel,
+            firstFresh: CJRM.isFresh(first),
+            kylerCount: s.people.filter((p) => p.name === 'Kyler Kuehl').length,
+            seen: (s.settings.seenHubIds || []).indexOf('gmail-contact-form-kyler-1') !== -1,
+            toast: CJRM.messageToast(r.filed, r.names),
+            freshText: card ? card.innerText : '',
+            fetchedSetting: s.settings.lastPollFetched,
+            filedSetting: s.settings.lastPollFiled,
+            email: kyler && kyler.email,
+          };
+        }""")
+        check(
+            "contact form without an existing Kyler is created as a website lead",
+            case_a.get("filed") == 1 and case_a.get("status") == "created" and case_a.get("channel") == "web" and case_a.get("email") == "kyler.kuehl@gmail.com",
+            case_a,
+        )
+        check(
+            "new contact-form lead is first on the desk with a NEW marker",
+            case_a.get("firstName") == "Kyler Kuehl" and case_a.get("firstFresh") is True and "new" in (case_a.get("freshText") or "").lower(),
+            case_a,
+        )
+        check(
+            "toast names the contact-form sender",
+            case_a.get("toast") == "1 new message from Kyler Kuehl",
+            case_a,
+        )
+        check(
+            "successful contact-form file is marked seen and counted",
+            case_a.get("seen") is True and case_a.get("fetchedSetting") == 1 and case_a.get("filedSetting") == 1,
+            case_a,
+        )
+
+        page.evaluate("() => { CJRM.setView('more'); }")
+        last_check = page.inner_text("#hubLastCheck")
+        check(
+            "More shows Last check fetched and filed counts",
+            "fetched 1" in last_check and "filed 1" in last_check and last_check.lower().startswith("last check:"),
+            last_check,
+        )
+
+        case_b = page.evaluate("""async () => {
+          CJRM.getState().people.filter((p) => p.name === 'Kyler Kuehl').forEach((p) => CJRM.removePerson(p.id));
+          CJRM.newPerson({
+            name: 'Kyler Kuehl',
+            channel: 'phone1',
+            email: 'kyler.kuehl@gmail.com',
+            phone: '2049553245',
+            stage: 'done',
+            listing: 'earlier test info',
+            createdAt: '2026-11-21T18:00:00.000Z',
+            snoozeUntil: '2099-01-01T00:00:00.000Z',
+            unread: false,
+          }, 'Earlier test note from Kyler.');
+          CJRM.setState({ settings: Object.assign({}, CJRM.getState().settings, {
+            hubUrl: location.origin + '/mock-hub-kyler',
+            hubSecret: 'test-secret-cjrm',
+            shopPhone: '2049553245',
+            personalPhone: '',
+            seenHubIds: [],
+          })});
+          const before = CJRM.getState().people.filter((p) => p.name === 'Kyler Kuehl').length;
+          const r = await CJRM.pollHub();
+          CJRM.revealFiledOnDesk();
+          CJRM.setView('desk');
+          const s = CJRM.getState();
+          const now = Date.now();
+          const open = CJRM.sortPeople(s.people.filter((p) => {
+            return CJRM.isFresh(p) || CJRM.matchesFilter(p, s.messages, { kind: 'open' }, now, '');
+          }), s.messages, now);
+          const first = open[0] || {};
+          const kylers = s.people.filter((p) => p.name === 'Kyler Kuehl');
+          const kyler = kylers[0];
+          const msgs = s.messages.filter((m) => kyler && m.personId === kyler.id);
+          const hit = msgs.some((m) => /small deck repair/.test(m.body || ''));
+          const card = document.querySelector('#freshList .lead.is-fresh');
+          return {
+            before: before,
+            after: kylers.length,
+            filed: r.filed,
+            status: (r.results && r.results[0] && r.results[0].status) || '',
+            firstName: first.name,
+            firstFresh: CJRM.isFresh(first),
+            stage: kyler && kyler.stage,
+            snooze: kyler && kyler.snoozeUntil,
+            unread: kyler && kyler.unread,
+            channel: kyler && kyler.channel,
+            hit: hit,
+            freshText: card ? card.innerText : '',
+            visibleOpen: kyler ? (CJRM.isFresh(kyler) || CJRM.matchesFilter(kyler, s.messages, { kind: 'open' }, now, '')) : false,
+            toast: CJRM.messageToast(r.filed, r.names),
+          };
+        }""")
+        check(
+            "contact form with an existing Kyler matches him and does not create a duplicate",
+            case_b.get("before") == 1 and case_b.get("after") == 1 and case_b.get("status") == "matched" and case_b.get("filed") == 1 and case_b.get("hit") is True,
+            case_b,
+        )
+        check(
+            "matched Kyler moves to the top of the desk with NEW, even if he was done and held",
+            case_b.get("firstName") == "Kyler Kuehl" and case_b.get("firstFresh") is True and case_b.get("stage") == "contacted" and case_b.get("snooze") is None and case_b.get("visibleOpen") is True and "new" in (case_b.get("freshText") or "").lower(),
+            case_b,
+        )
+        check(
+            "matched contact-form toast says 1 new message from Kyler Kuehl",
+            case_b.get("toast") == "1 new message from Kyler Kuehl",
+            case_b,
+        )
+
+        case_skip = page.evaluate("""async () => {
+          CJRM.setState({ settings: Object.assign({}, CJRM.getState().settings, {
+            hubUrl: location.origin + '/mock-hub-empty',
+            hubSecret: 'test-secret-cjrm',
+            seenHubIds: [],
+          })});
+          const r = await CJRM.pollHub();
+          const seen = CJRM.getState().settings.seenHubIds || [];
+          return { filed: r.filed, status: (r.results && r.results[0] && r.results[0].status) || '', seen: seen.indexOf('gmail-empty-skip-1') !== -1, fetched: r.fetched };
+        }""")
+        check(
+            "empty mailbox item is not marked seen and is not filed",
+            case_skip.get("filed") == 0 and case_skip.get("status") == "skipped" and case_skip.get("seen") is False and case_skip.get("fetched") == 1,
+            case_skip,
+        )
+
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.2", "Version 1.1.2" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.3", "Version 1.1.3" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)

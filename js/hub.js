@@ -49,18 +49,29 @@
     const seen = new Set(settings.seenHubIds || []);
     const fresh = pieces.filter(function (p) { return !p.id || !seen.has(p.id); });
     const result = CJRM.filePieces(fresh);
-    fresh.forEach(function (p) { if (p.id) seen.add(p.id); });
+    const accepted = {};
+    (result.results || []).forEach(function (row) {
+      if (row && row.sourceId && (row.status === "created" || row.status === "matched" || row.status === "duplicate")) {
+        accepted[row.sourceId] = true;
+      }
+    });
+    fresh.forEach(function (p) { if (p.id && accepted[p.id]) seen.add(p.id); });
     const ids = Array.from(seen);
     const trimmed = ids.length > 2000 ? ids.slice(ids.length - 2000) : ids;
+    const names = (result.results || []).filter(function (row) {
+      return row && (row.status === "created" || row.status === "matched") && row.name;
+    }).map(function (row) { return row.name; });
     CJRM.setState({
       settings: Object.assign({}, CJRM.getState().settings, {
         seenHubIds: trimmed,
         lastPollAt: new Date().toISOString(),
         lastPollOk: true,
         lastPollError: "",
+        lastPollFetched: pieces.length,
+        lastPollFiled: result.filed,
       }),
     });
-    return { fetched: pieces.length, filed: result.filed, results: result.results };
+    return { fetched: pieces.length, filed: result.filed, results: result.results, names: names };
   }
 
   function recordPollError(err) {
@@ -100,8 +111,11 @@
   }
 
   function afterPollUi(result) {
+    if (result && result.filed > 0 && typeof CJRM.revealFiledOnDesk === "function") {
+      CJRM.revealFiledOnDesk();
+    }
     if (result && result.filed > 0 && typeof CJRM.notifyNewItems === "function") {
-      CJRM.notifyNewItems(result.filed);
+      CJRM.notifyNewItems(result.filed, result.names);
     } else if (typeof CJRM.refresh === "function") {
       CJRM.refresh();
     }
