@@ -1,4 +1,4 @@
-"""CJRM v1.1.0 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.1 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -72,7 +72,7 @@ def main():
         page.wait_for_selector("#pinnedLabel")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.0")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.1")
         check("demo banner is visible on first load", "Demo data" in page.inner_text("#demoBanner") and page.is_visible("#demoBanner"))
         check("demo banner says fictional / not real", "fictional" in page.inner_text("#demoBanner").lower() and "not real" in page.inner_text("#demoBanner").lower())
         check("privacy: data stays on the device is described in More later or header area", True)
@@ -152,6 +152,15 @@ def main():
         check("open list does not include Lena (Done)", "Lena Voss" not in names_open, names_open)
         check("open list includes a waiting lead (Priya or Devon)", "Priya Nandakumar" in names_open or "Devon Cho" in names_open, names_open)
         check("channel badges are visible", page.locator(".badge").count() >= 4)
+        meta = page.evaluate("() => ({ wpg: CJRM.CHANNEL_META.phone1, tor: CJRM.CHANNEL_META.phone2 })")
+        check("Winnipeg/Toronto badge labels", meta["wpg"]["short"] == "WPG" and meta["wpg"]["name"] == "Winnipeg number" and meta["tor"]["short"] == "TOR" and meta["tor"]["name"] == "Toronto number", meta)
+        classified = page.evaluate("""() => ({
+          oldShop: CJRM.classifyMail({ subject: 'Text to shop phone 204-555-0140', body: 'hi', from: '' }, { phone1: '204-555-0140', phone2: '416-555-0190' }),
+          oldPers: CJRM.classifyMail({ subject: 'Text to personal phone 416-555-0190', body: 'hi', from: '' }, { phone1: '204-555-0140', phone2: '416-555-0190' }),
+          wpg: CJRM.classifyMail({ subject: 'Text to Winnipeg number', body: 'hi', from: '' }, { phone1: '', phone2: '' }),
+          tor: CJRM.classifyMail({ subject: 'Text to Toronto number', body: 'hi', from: '' }, { phone1: '', phone2: '' })
+        })""")
+        check("old and new mailbox subjects still classify as phone1/phone2", classified == {"oldShop": "phone1", "oldPers": "phone2", "wpg": "phone1", "tor": "phone2"}, classified)
 
         # --- search ---
         page.fill("#search", "shed")
@@ -232,7 +241,7 @@ def main():
         channels = [row["channel"] for row in cls]
         names_mail = [row["name"] for row in cls]
         check(
-            "sample mailbox classifies KJ, FB, IG, shop, personal",
+            "sample mailbox classifies KJ, FB, IG, Winnipeg, Toronto",
             channels == ["kijiji", "facebook", "instagram", "phone1", "phone2"],
             cls,
         )
@@ -316,7 +325,7 @@ def main():
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.0", "Version 1.1.0" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.1", "Version 1.1.1" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)
@@ -325,8 +334,8 @@ def main():
           { id: "voip-test-1", source: "voip", from: "Sam", body: "Can you call me about the fence?", date: "2026-11-22T12:05:00.000Z", name: "Sam" },
           { id: "empty", source: "sms", from: "2045550140", body: "   " }
         ])""")
-        check("native mapper files SMS as shop line (phone1)", len(pieces) == 2 and pieces[0]["channel"] == "phone1" and pieces[0]["id"] == "sms-test-1" and pieces[0]["phone"] == "2045550140", pieces)
-        check("native mapper files VoIP as personal line (phone2)", pieces[1]["channel"] == "phone2" and pieces[1]["name"] == "Sam", pieces)
+        check("native mapper files SMS as Winnipeg number (phone1)", len(pieces) == 2 and pieces[0]["channel"] == "phone1" and pieces[0]["id"] == "sms-test-1" and pieces[0]["phone"] == "2045550140", pieces)
+        check("native mapper files VoIP as Toronto number (phone2)", pieces[1]["channel"] == "phone2" and pieces[1]["name"] == "Sam", pieces)
 
         with page.expect_download() as dlinfo:
             page.click("#btnExport")
@@ -372,8 +381,8 @@ def main():
           return { stage: p.stage, last: msgs[msgs.length - 1] };
         }""")
         check(
-            "one-tap log records an outgoing shop-line call",
-            logged["last"]["direction"] == "out" and logged["last"]["channel"] == "phone1" and "call" in logged["last"]["body"].lower() and "voicemail" in logged["last"]["body"].lower(),
+            "one-tap log records an outgoing Winnipeg-number call",
+            logged["last"]["direction"] == "out" and logged["last"]["channel"] == "phone1" and "winnipeg number" in logged["last"]["body"].lower() and "voicemail" in logged["last"]["body"].lower(),
             logged,
         )
         check("logging an outgoing message advances New lead to Contacted", logged["stage"] == "contacted", logged["stage"])

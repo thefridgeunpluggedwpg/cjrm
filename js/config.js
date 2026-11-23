@@ -1,8 +1,8 @@
-/* CJRM v1.1.0 — shared constants. Nothing here is a real client or secret. */
+/* CJRM v1.1.1 — shared constants. Nothing here is a real client or secret. */
 (function (global) {
   const CJRM = global.CJRM || (global.CJRM = {});
 
-  CJRM.VERSION = "1.1.0";
+  CJRM.VERSION = "1.1.1";
   CJRM.APP_NAME = "CJRM";
   CJRM.APP_TITLE = "Carpenter Johnny Relationship Management";
   CJRM.STORAGE_KEY = "cjrm-v1";
@@ -26,8 +26,8 @@
     facebook: { short: "FB", name: "Facebook" },
     instagram: { short: "IG", name: "Instagram" },
     whatsapp: { short: "WA", name: "WhatsApp" },
-    phone1: { short: "SH", name: "Shop line" },
-    phone2: { short: "PE", name: "Personal line" },
+    phone1: { short: "WPG", name: "Winnipeg number" },
+    phone2: { short: "TOR", name: "Toronto number" },
     web: { short: "WEB", name: "Website" },
     email: { short: "EM", name: "Email" },
     manual: { short: "IN", name: "Manual" },
@@ -91,6 +91,8 @@
     "email lead",
     "shop line lead",
     "personal line lead",
+    "winnipeg number lead",
+    "toronto number lead",
     "manual lead",
   ];
 })(window);

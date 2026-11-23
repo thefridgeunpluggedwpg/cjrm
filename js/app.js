@@ -222,8 +222,8 @@
         "</div>" +
         "<h2 class='section-label' style='padding:0'>Log a call or text</h2>" +
         '<div class="row">' +
-        '<button type="button" class="chip" data-logline="phone1" aria-pressed="true" id="logLineShop">Shop line</button>' +
-        '<button type="button" class="chip" data-logline="phone2" aria-pressed="false" id="logLinePers">Personal line</button>' +
+        '<button type="button" class="chip" data-logline="phone1" aria-pressed="true" id="logLineShop">Winnipeg number</button>' +
+        '<button type="button" class="chip" data-logline="phone2" aria-pressed="false" id="logLinePers">Toronto number</button>' +
         "</div>" +
         '<div class="row">' +
         '<button type="button" class="chip" data-logkind="call" aria-pressed="true" id="logKindCall">Call</button>' +
@@ -303,8 +303,8 @@
   function renderNativeCards() {
     if (!(CJRM.isNativeApp && CJRM.isNativeApp())) return "";
     return '<div class="card stack" id="nativeSmsCard">' +
-      "<h2 style='margin-top:0'>Shop line texts (this phone's SIM)</h2>" +
-      "<p class='lede'>The Android app can file incoming texts from this phone's SIM as the shop line, even when the app is closed. The mailbox hub still works the same way.</p>" +
+      "<h2 style='margin-top:0'>Winnipeg number texts (this phone's SIM)</h2>" +
+      "<p class='lede'>The Android app can file incoming texts from this phone's SIM as the Winnipeg number, even when the app is closed. The mailbox hub still works the same way.</p>" +
       '<p id="smsStatus" class="lede">Checking text permission…</p>' +
       "<p class='lede'>If the phone will not let you turn texts on, open App info, tap the three dots at the top, then tap <strong>Allow restricted settings</strong>. Then come back and tap Allow texts again. This is common on Android 13 and newer.</p>" +
       '<div class="row">' +
@@ -313,13 +313,13 @@
       '<button type="button" class="btn-secondary" id="btnSmsImport">Import recent texts</button>' +
       "</div></div>" +
       '<div class="card stack" id="nativeVoipCard">' +
-      "<h2 style='margin-top:0'>VoIP line texts (optional)</h2>" +
-      "<p class='lede'>If the second number lives in a VoIP app, CJRM can file that app's message notifications as the VoIP line (the personal line). This is off until you turn on notification access and pick the app. Shop-line SIM texts still work if you skip this.</p>" +
+      "<h2 style='margin-top:0'>Toronto number texts (optional)</h2>" +
+      "<p class='lede'>If the Toronto number lives in a VoIP app, CJRM can file that app's message notifications as the Toronto number. This is off until you turn on notification access and pick the app. Winnipeg SIM texts still work if you skip this.</p>" +
       '<p id="voipStatus" class="lede">Checking notification access…</p>' +
-      '<label class="field"><span>VoIP messaging app</span><select id="voipApp"><option value="">None — VoIP capture is off</option></select></label>' +
+      '<label class="field"><span>Toronto messaging app</span><select id="voipApp"><option value="">None — Toronto capture is off</option></select></label>' +
       '<div class="row">' +
       '<button type="button" class="btn" id="btnVoipAccess">Open notification access</button>' +
-      '<button type="button" class="btn-secondary" id="btnVoipSave">Save VoIP app</button>' +
+      '<button type="button" class="btn-secondary" id="btnVoipSave">Save Toronto app</button>' +
       "</div></div>";
   }
 
@@ -335,7 +335,7 @@
       if (smsEl) {
         if (smsOn) {
           smsEl.className = "status-ok";
-          smsEl.textContent = "Texts from this phone's SIM will be filed as the shop line" + (smsRead ? ". Recent texts can be imported too." : ". Turn on read access if you want to import recent texts.");
+          smsEl.textContent = "Texts from this phone's SIM will be filed as the Winnipeg number" + (smsRead ? ". Recent texts can be imported too." : ". Turn on read access if you want to import recent texts.");
         } else {
           smsEl.className = "status-bad";
           smsEl.textContent = "Texts are not allowed yet. Tap Allow texts. If the switch is missing or greyed out, use Allow restricted settings in App info first.";
@@ -371,16 +371,16 @@
         const label = status.voipAppLabel || pkg;
         if (!access && !pkg) {
           voipEl.className = "lede";
-          voipEl.textContent = "VoIP capture is off. To use it, tap Open notification access, turn on CJRM, then pick the VoIP app and tap Save VoIP app.";
+          voipEl.textContent = "Toronto capture is off. To use it, tap Open notification access, turn on CJRM, then pick the Toronto app and tap Save Toronto app.";
         } else if (!access) {
           voipEl.className = "status-bad";
-          voipEl.textContent = "Notification access is off, so VoIP texts are not being captured. Tap Open notification access and turn on CJRM.";
+          voipEl.textContent = "Notification access is off, so Toronto texts are not being captured. Tap Open notification access and turn on CJRM.";
         } else if (!pkg) {
           voipEl.className = "lede";
-          voipEl.textContent = "Notification access is on. Pick the app that receives the VoIP number's texts, then tap Save VoIP app.";
+          voipEl.textContent = "Notification access is on. Pick the app that receives the Toronto number's texts, then tap Save Toronto app.";
         } else {
           voipEl.className = "status-ok";
-          voipEl.textContent = "VoIP texts from " + label + " will be filed as the VoIP line.";
+          voipEl.textContent = "Toronto texts from " + label + " will be filed as the Toronto number.";
         }
       }
     } catch (err) {
@@ -422,9 +422,9 @@
       const label = select && select.selectedIndex >= 0 ? select.options[select.selectedIndex].textContent : "";
       try {
         await CJRM.nativeSetVoipApp(pkg, label);
-        toast(pkg ? "VoIP app saved." : "VoIP capture is off.");
+        toast(pkg ? "Toronto app saved." : "Toronto capture is off.");
       } catch (err) {
-        toast(err.message || "Could not save the VoIP app.");
+        toast(err.message || "Could not save the Toronto app.");
       }
       fillNativeUi();
     });
@@ -452,8 +452,8 @@
       "<p class='lede'>Paste the Apps Script web-app URL and the shared secret from ONBOARDING.md. The desk checks for new mail on its own while it is open.</p>" +
       field("Endpoint URL", "hubUrl", s.hubUrl, "url") +
       '<label class="field"><span>Shared secret</span><input id="hubSecret" type="password" value="' + esc(s.hubSecret) + '" autocomplete="off"></label>' +
-      field("Shop line (for tagging forwarded texts)", "shopPhone", s.shopPhone, "tel") +
-      field("Personal line", "personalPhone", s.personalPhone, "tel") +
+      field("Winnipeg number (for tagging forwarded texts)", "shopPhone", s.shopPhone, "tel") +
+      field("Toronto number", "personalPhone", s.personalPhone, "tel") +
       status +
       '<div class="row"><button type="button" class="btn" id="btnSaveHub">Save hub settings</button>' +
       '<button type="button" class="btn-secondary" id="btnPollNow">Check mailbox now</button></div>' +
@@ -590,7 +590,7 @@
       const kind = ui.logKind || "call";
       const dir = ui.logDir || "in";
       const note = (($("logNote") || {}).value || "").trim();
-      const lineName = line === "phone2" ? "personal line" : "shop line";
+      const lineName = line === "phone2" ? "Toronto number" : "Winnipeg number";
       const body = (dir === "in" ? "Incoming " : "Outgoing ") + kind + " on the " + lineName + (note ? " — " + note : ".");
       CJRM.addMessage(ui.personId, { direction: dir, channel: line, body: body });
       toast("Logged the " + kind + ".");

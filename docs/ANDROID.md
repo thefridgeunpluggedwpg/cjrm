@@ -1,6 +1,6 @@
 # Building the CJRM Android app
 
-This is a Capacitor wrapper around the same web desk. Incoming SIM texts are filed as the shop line. An optional notification listener can file texts from a chosen VoIP app as the VoIP (personal) line. The listener is off until notification access is granted and an app is picked. SIM capture works on its own.
+This is a Capacitor wrapper around the same web desk. Incoming SIM texts are filed as the Winnipeg number. An optional notification listener can file texts from a chosen VoIP app as the Toronto number. The listener is off until notification access is granted and an app is picked. SIM capture works on its own.
 
 ## Release build
 
@@ -12,7 +12,7 @@ npm install
 npm run apk
 ```
 
-The signed APK is written to `android/app/build/outputs/apk/release/app-release.apk`. Rename a copy to `CJRM-v1.1.0.apk` for delivery.
+The signed APK is written to `android/app/build/outputs/apk/release/app-release.apk`. Rename a copy to `CJRM-v1.1.1.apk` for delivery.
 
 ## Google developer verification (as of 22 Nov 2026)
 

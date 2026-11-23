@@ -313,6 +313,10 @@
     shop: "phone1",
     "shop phone": "phone1",
     "shop line": "phone1",
+    winnipeg: "phone1",
+    "winnipeg number": "phone1",
+    "winnipeg phone": "phone1",
+    "text to winnipeg": "phone1",
     sms: "phone1",
     text: "phone1",
     phone2: "phone2",
@@ -320,6 +324,10 @@
     personal: "phone2",
     "personal phone": "phone2",
     "personal line": "phone2",
+    toronto: "phone2",
+    "toronto number": "phone2",
+    "toronto phone": "phone2",
+    "text to toronto": "phone2",
     whatsapp: "whatsapp",
     wa: "whatsapp",
     web: "web",
@@ -346,8 +354,8 @@
     const shop = onlyDigits((phones && phones.phone1) || "");
     if (personal.length >= 7 && hay.indexOf(personal) !== -1) return "phone2";
     if (shop.length >= 7 && hay.indexOf(shop) !== -1) return "phone1";
-    if (/\bpersonal (phone|line)\b/.test(blob)) return "phone2";
-    if (/\b(shop (phone|line)|sms|text message|smsforwarder|sms-forwarder)\b/.test(blob)) return "phone1";
+    if (/\b(personal (phone|line)|toronto (number|phone|line)|text to toronto)\b/.test(blob)) return "phone2";
+    if (/\b(shop (phone|line)|winnipeg (number|phone|line)|text to winnipeg|sms|text message|smsforwarder|sms-forwarder)\b/.test(blob)) return "phone1";
     if (blob.indexOf("contact form") !== -1 || blob.indexOf("website") !== -1) return "web";
     return "email";
   }

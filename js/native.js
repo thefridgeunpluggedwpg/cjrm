@@ -35,7 +35,7 @@
       return {
         id: String(row.id || row.sourceId || ""),
         from: from,
-        subject: voip ? "Text to personal phone" : "Text to shop phone",
+        subject: voip ? "Text to Toronto number" : "Text to Winnipeg number",
         body: body,
         date: row.date || row.at || "",
         channel: channel,

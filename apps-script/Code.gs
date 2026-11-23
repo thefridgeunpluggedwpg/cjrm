@@ -9,6 +9,8 @@ var SEARCH = [
   'OR subject:"contact form"',
   'OR subject:"text to shop"',
   'OR subject:"text to personal"',
+  'OR subject:"text to winnipeg"',
+  'OR subject:"text to toronto"',
   'OR subject:SmsForwarder',
   'OR label:sms-forwarder',
   'OR list:kijiji OR subject:Kijiji)'
@@ -111,10 +113,14 @@ function classify_(piece, phones) {
   if (shop.length >= 7 && hay.indexOf(shop) !== -1) {
     return 'phone1';
   }
-  var p2 = ['personal phone', 'personal line'];
+  var p2 = ['personal phone', 'personal line',
+    'toronto number', 'toronto phone',
+    'text to toronto'];
   if (has_(blob, p2)) return 'phone2';
   var p1 = ['shop phone', 'shop line', 'sms',
-    'text message', 'smsforwarder'];
+    'text message', 'smsforwarder',
+    'winnipeg number', 'winnipeg phone',
+    'text to winnipeg'];
   if (has_(blob, p1)) return 'phone1';
   if (has_(blob, ['contact form', 'website'])) {
     return 'web';

@@ -22,9 +22,9 @@ Do not type the secret phrase or Johnny's real phone numbers into GitHub, a grou
 4. Tap **Install app** or **Add to Home screen**.
 5. Open CJRM from the home screen. The icon is the CJ stamp.
 6. Open **More** (bottom right).
-7. Confirm it says **Version 1.1.0**. If it shows an older number, close CJRM all the way (swipe it out of recent apps), open it again, and check **More** once more.
+7. Confirm it says **Version 1.1.1**. If it shows an older number, close CJRM all the way (swipe it out of recent apps), open it again, and check **More** once more.
 
-You are done with this part when **More** shows **Version 1.1.0**.
+You are done with this part when **More** shows **Version 1.1.1**.
 
 ---
 
@@ -34,32 +34,32 @@ You are done with this part when **More** shows **Version 1.1.0**.
 
 **Where:** Johnny's Android phone
 
-This installs the CJRM app file, which can read texts from this phone's SIM and, if you choose, from a VoIP app. You do not need the SMS-forwarder app for the SIM line if this works. The mailbox hub still needs to be set up (Sheet 1).
+This installs the CJRM app file, which can read texts from this phone's SIM (the Winnipeg number) and, if you choose, from a VoIP app (the Toronto number). You do not need the SMS-forwarder app for the Winnipeg line if this works. The mailbox hub still needs to be set up (Sheet 1).
 
-1. Open the file named **CJRM-v1.1.0.apk** (from Kyler's Drive, in the CJRM folder).
+1. Open the file named **CJRM-v1.1.1.apk** (from Kyler's Drive, in the CJRM folder).
 2. If the phone asks whether to allow installs from this source, turn that on, then tap to install.
 3. Open CJRM. The icon is the CJ stamp.
-4. Open **More** (bottom right) and confirm it says **Version 1.1.0**.
-5. Under **Shop line texts**, tap **Allow texts**, then allow SMS (and, if asked, allow reading texts so you can import recent ones).
+4. Open **More** (bottom right) and confirm it says **Version 1.1.1**.
+5. Under **Winnipeg number texts**, tap **Allow texts**, then allow SMS (and, if asked, allow reading texts so you can import recent ones).
 6. If the phone will not let you turn texts on, open **App info** from that same card (or hold the CJRM icon, tap App info). Tap the three dots at the top, then tap **Allow restricted settings**. Go back to CJRM and tap **Allow texts** again. This is common on Android 13 and newer.
-7. Confirm the green line says texts from this phone's SIM will be filed as the shop line.
+7. Confirm the green line says texts from this phone's SIM will be filed as the Winnipeg number.
 8. Optional: tap **Import recent texts** to pull in recent SIM texts already on the phone.
-9. Send a test text to the shop number from another phone, then open CJRM and look at the **Desk**. It should show the **SH** badge.
+9. Send a test text to the Winnipeg number from another phone, then open CJRM and look at the **Desk**. It should show the **WPG** badge.
 
-### Optional: VoIP line (the second number)
+### Optional: Toronto number (the VoIP line)
 
-Do this only if the second number is in a VoIP app. Shop-line SIM texts still work if you skip it.
+Do this only if the Toronto number is in a VoIP app. Winnipeg SIM texts still work if you skip it.
 
-10. Under **VoIP line texts**, tap **Open notification access**.
+10. Under **Toronto number texts**, tap **Open notification access**.
 11. In the list, turn on **CJRM**. Then go back to CJRM.
-12. In **VoIP messaging app**, pick the app that receives the VoIP number's texts.
-13. Tap **Save VoIP app**.
-14. Confirm the green line names that app and says texts will be filed as the VoIP line.
-15. Send a test text to the VoIP number, wait for the VoIP app's notification, then open CJRM and look at the **Desk**. It should show the **PE** badge.
+12. In **Toronto messaging app**, pick the app that receives the Toronto number's texts.
+13. Tap **Save Toronto app**.
+14. Confirm the green line names that app and says texts will be filed as the Toronto number.
+15. Send a test text to the Toronto number, wait for the VoIP app's notification, then open CJRM and look at the **Desk**. It should show the **TOR** badge.
 
-**You are done with this sheet when** a SIM test text appears on the Desk with the **SH** badge, and — if you set up VoIP — a VoIP test appears with the **PE** badge.
+**You are done with this sheet when** a Winnipeg test text appears on the Desk with the **WPG** badge, and — if you set up Toronto capture — a Toronto test appears with the **TOR** badge.
 
-If VoIP texts do not appear, confirm notification access is still on for CJRM, that the correct app is saved, and that the VoIP app actually showed a notification for the test.
+If Toronto texts do not appear, confirm notification access is still on for CJRM, that the correct app is saved, and that the Toronto app actually showed a notification for the test.
 
 
 ---
@@ -130,12 +130,12 @@ These are the same steps already proven to work. Do them again in Johnny's Googl
 **If something goes wrong**
 
 - If it says **unauthorized**: the secret in the app does not match the one in the script. Delete everything in the **Shared secret** box, type the phrase again carefully, tap **Save hub settings**, then tap **Check mailbox now**.
-- If it says **Failed to fetch**: close CJRM all the way (swipe it out of recent apps), open it again, confirm **More** says **Version 1.1.0**, then tap **Check mailbox now**.
+- If it says **Failed to fetch**: close CJRM all the way (swipe it out of recent apps), open it again, confirm **More** says **Version 1.1.1**, then tap **Check mailbox now**.
 - If you are not sure the secret was saved: go back to **Project Settings**. If you see **Edit script properties**, it was saved. Open it and confirm the name is exactly `CJRM_SECRET`.
 
 ---
 
-## Sheet 2. Phone numbers (shop line and personal line)
+## Sheet 2. Phone numbers (Winnipeg number and Toronto number)
 
 **Time:** about 25 minutes
 
@@ -143,11 +143,11 @@ These are the same steps already proven to work. Do them again in Johnny's Googl
 
 CJRM cannot read text messages by itself. A free app on the Android phone forwards incoming texts to Johnny's Gmail. Then CJRM files them.
 
-This sheet is for Android. The official setup notes do not cover iPhone text forwarding, so do this on the Android phone that receives the shop and personal texts.
+This sheet is for Android. The official setup notes do not cover iPhone text forwarding, so do this on the Android phone that receives the Winnipeg and Toronto texts.
 
-If you already installed the Android app and shop-line texts are filing on the Desk, you can skip the SMS-forwarder steps below for the SIM line. Use the optional VoIP steps in **Install CJRM on Android** for the second number instead of a second forwarder rule.
+If you already installed the Android app and Winnipeg texts are filing on the Desk, you can skip the SMS-forwarder steps below for the SIM line. Use the optional Toronto steps in **Install CJRM on Android** for the second number instead of a second forwarder rule.
 
-Use Johnny's real numbers. In the examples below, `204-555-0140` stands for the shop line and `204-555-0190` stands for the personal line. Do not type those 555 numbers into the app. Do not write the real numbers in GitHub or a group chat.
+Use Johnny's real numbers. In the examples below, `204-555-0140` stands for the Winnipeg number and `416-555-0190` stands for the Toronto number. Do not type those 555 numbers into the app. Do not write the real numbers in GitHub or a group chat.
 
 ### A. Install the forwarder
 
@@ -158,36 +158,36 @@ Use Johnny's real numbers. In the examples below, `204-555-0140` stands for the 
 5. If the phone is Android 13 or newer, look for a notifications permission and allow it.
 6. Look for battery or battery-optimization settings for this app, and turn restrictions off so the phone does not stop it overnight.
 
-### B. Make a rule for the shop line
+### B. Make a rule for the Winnipeg number
 
 7. In the forwarder app, look for a way to add a send rule or a similar forwarding rule. The exact wording varies by version, so look for those words rather than waiting for one fixed button name.
-8. Point the rule at the SIM that is the shop line, not simply "SIM 1" if the slots are the other way around.
+8. Point the rule at the SIM that is the Winnipeg number, not simply "SIM 1" if the slots are the other way around.
 9. Set it to email Johnny's Gmail (the same account you used in Sheet 1).
-10. Set the email subject to this pattern, using the real shop number: `Text to shop phone 204-555-0140`. Replace the 555 example with the real shop number. The words `Text to shop` must appear in the subject.
+10. Set the email subject to this pattern, using the real Winnipeg number: `Text to Winnipeg number 204-555-0140`. Replace the 555 example with the real Winnipeg number. The older wording `Text to shop phone` still works.
 
-### C. Make a rule for the personal line
+### C. Make a rule for the Toronto number
 
 11. Add a second rule.
-12. Point it at the SIM that is the personal line.
+12. Point it at the line or app that is the Toronto number.
 13. Set it to email the same Gmail account.
-14. Set the email subject to this pattern, using the real personal number: `Text to personal phone 204-555-0190`. Replace the 555 example with the real personal number. The words `Text to personal` must appear in the subject.
+14. Set the email subject to this pattern, using the real Toronto number: `Text to Toronto number 416-555-0190`. Replace the 555 example with the real Toronto number. The older wording `Text to personal phone` still works.
 
 ### D. Enter the numbers in CJRM
 
 15. Open CJRM and tap **More**.
-16. In **Shop line (for tagging forwarded texts)**, type the real shop number.
-17. In **Personal line**, type the real personal number.
+16. In **Winnipeg number (for tagging forwarded texts)**, type the real Winnipeg number.
+17. In **Toronto number**, type the real Toronto number.
 18. Tap **Save hub settings**.
 
 You do not need to add the phone numbers in Apps Script. Entering them in **More** is enough.
 
 ### E. Test both lines
 
-19. From a different phone, send a short test text to the shop number.
-20. From a different phone, send a short test text to the personal number.
-21. Open Gmail for Johnny's account and confirm two emails arrived, one with `Text to shop` in the subject and one with `Text to personal`.
+19. From a different phone, send a short test text to the Winnipeg number.
+20. From a different phone, send a short test text to the Toronto number.
+21. Open Gmail for Johnny's account and confirm two emails arrived, one with Winnipeg in the subject and one with Toronto in the subject.
 22. In CJRM, tap **More**, then **Check mailbox now**.
-23. Open the **Desk**. The shop test should show the **SH** badge. The personal test should show the **PE** badge.
+23. Open the **Desk**. The Winnipeg test should show the **WPG** badge. The Toronto test should show the **TOR** badge.
 
 **You are done with this sheet when** both test texts appear on the Desk with the right badges.
 
@@ -302,7 +302,7 @@ Use this after Sheet 1 is working. It confirms the mailbox can file a message, e
 5. Open that Gmail inbox and confirm the email arrived.
 6. On the phone, open CJRM.
 7. Tap **More**.
-8. Confirm it still says **Version 1.1.0**.
+8. Confirm it still says **Version 1.1.1**.
 9. Tap **Check mailbox now**.
 10. Confirm you see **Last check:** followed by a date and time, with no red error.
 11. Open the **Desk** and look for the test item. It should show the **WEB** badge.

@@ -2,7 +2,7 @@
 
 A personal desk that puts every lead in one vertical list so nothing slips. Built for one user, on one Android phone. Not for sale, no subscription.
 
-Kijiji replies, Facebook and Instagram notification emails, WhatsApp notices, the shop line, the personal line, the website, and manual entries all land on the same desk. Anything unanswered for two hours, or with a follow-up due, stays pinned at the top.
+Kijiji replies, Facebook and Instagram notification emails, WhatsApp notices, the Winnipeg number, the Toronto number, the website, and manual entries all land on the same desk. Anything unanswered for two hours, or with a follow-up due, stays pinned at the top.
 
 ## Run it locally
 
@@ -25,7 +25,7 @@ python3 -m http.server 8765
 
 ## Android app (v1.1)
 
-A signed Android app wraps this same desk and can file incoming texts from the phone's SIM as the shop line, even when the app is closed. An optional notification listener can file texts from a chosen VoIP app as the VoIP (personal) line. The web app in the browser is unchanged.
+A signed Android app wraps this same desk and can file incoming texts from the phone's SIM as the Winnipeg number, even when the app is closed. An optional notification listener can file texts from a chosen VoIP app as the Toronto number. The web app in the browser is unchanged.
 
 Build the release APK on a machine with the Android SDK and the release key at `/home/box/secrets/cjrm-release.keystore` (never commit the key):
 
