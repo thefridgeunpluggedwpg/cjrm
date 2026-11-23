@@ -1,4 +1,4 @@
-"""CJRM v1.1.7 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.8 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -170,7 +170,7 @@ def main():
         page.wait_for_function("() => window.CJRM && CJRM.getState && document.querySelector('#onboard')")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.7")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.8")
         fresh = page.evaluate("""() => {
           const s = CJRM.getState();
           const names = (s.people || []).map((p) => p.name);
@@ -400,6 +400,19 @@ def main():
         check("open list does not include Lena (Done)", "Lena Voss" not in names_open, names_open)
         check("open list includes a waiting lead (Priya or Devon)", "Priya Nandakumar" in names_open or "Devon Cho" in names_open, names_open)
         check("channel badges are visible", page.locator(".badge").count() >= 4)
+        select_styles = page.evaluate("""() => {
+          const us = (el) => el ? getComputedStyle(el).userSelect : null;
+          return {
+            header: us(document.querySelector('.app-header')),
+            chip: us(document.querySelector('.chip')),
+            card: us(document.querySelector('[data-person-swipe]')),
+            search: us(document.querySelector('#search')),
+          };
+        }""")
+        check("computed user-select is none on desk cards", select_styles["card"] == "none", select_styles)
+        check("computed user-select is none on chips", select_styles["chip"] == "none", select_styles)
+        check("computed user-select is none on the header", select_styles["header"] == "none", select_styles)
+        check("computed user-select stays text on inputs", select_styles["search"] == "text", select_styles)
         meta = page.evaluate("() => ({ wpg: CJRM.CHANNEL_META.phone1, tor: CJRM.CHANNEL_META.phone2 })")
         check("Winnipeg/Toronto badge labels", meta["wpg"]["short"] == "WPG" and meta["wpg"]["name"] == "Winnipeg number" and meta["tor"]["short"] == "TOR" and meta["tor"]["name"] == "Toronto number", meta)
         classified = page.evaluate("""() => ({
@@ -1121,7 +1134,7 @@ def main():
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.7", "Version 1.1.7" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.8", "Version 1.1.8" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)

@@ -1069,6 +1069,8 @@
       }
       snapBack();
     }
+    handle.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    el.addEventListener("contextmenu", function (e) { e.preventDefault(); });
     handle.addEventListener("pointerup", endPointer);
     handle.addEventListener("pointercancel", endPointer);
     handle.addEventListener("click", function (e) {
@@ -1519,6 +1521,11 @@
     if ($("btnDismissDemo")) $("btnDismissDemo").addEventListener("click", function () {
       ui.hideDemoBanner = true;
       $("demoBanner").hidden = true;
+    });
+    document.addEventListener("contextmenu", function (e) {
+      const node = e.target && e.target.closest ? e.target.closest("input, textarea, [contenteditable], [contenteditable='true']") : null;
+      if (node) return;
+      e.preventDefault();
     });
     $("btnInstall").addEventListener("click", function () { offerInstall(true); });
     $("btnInstallNow").addEventListener("click", function () {

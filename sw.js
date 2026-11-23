@@ -1,4 +1,4 @@
-const CACHE = 'cjrm-v1.1.7';
+const CACHE = 'cjrm-v1.1.8';
 const FILES = [
   './',
   'index.html',

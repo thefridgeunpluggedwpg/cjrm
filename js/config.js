@@ -1,8 +1,8 @@
-/* CJRM v1.1.7 — shared constants. Nothing here is a real client or secret. */
+/* CJRM v1.1.8 — shared constants. Nothing here is a real client or secret. */
 (function (global) {
   const CJRM = global.CJRM || (global.CJRM = {});
 
-  CJRM.VERSION = "1.1.7";
+  CJRM.VERSION = "1.1.8";
   CJRM.APP_NAME = "CJRM";
   CJRM.APP_TITLE = "Carpenter Johnny Relationship Management";
   CJRM.STORAGE_KEY = "cjrm-v1";

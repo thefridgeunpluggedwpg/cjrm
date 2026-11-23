@@ -21,9 +21,9 @@ On the Android phone:
    - Step 2 is **Connect your email**. Paste the mailbox hub URL and the same secret you set in the Apps Script. Tap **Test connection**. Wait for the green **Mailbox connected** line, then tap **Open the desk**.
 5. The desk should say **Waiting for your first message**.
 
-To confirm the version after setup, open **More**. It should say **Version 1.1.7**.
+To confirm the version after setup, open **More**. It should say **Version 1.1.8**.
 
-If you are using the Android app file (CJRM-v1.1.7.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
+If you are using the Android app file (CJRM-v1.1.8.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
 
 
 ## 2. Install the mailbox hub (Google Apps Script)
