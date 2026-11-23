@@ -115,6 +115,70 @@
     return notes.length ? notes[notes.length - 1].body : "";
   }
 
+  function isPhoneLikeName(value) {
+    const t = String(value || "").trim();
+    if (!t) return false;
+    const d = onlyDigits(t);
+    const compact = t.replace(/[\s()+.\-]/g, "");
+    return d.length >= 7 && d.length >= Math.max(1, compact.length - 1);
+  }
+
+  function sourceLabel(channel) {
+    const meta = (CJRM.CHANNEL_META || {})[channel] || {};
+    return meta.badge || meta.name || meta.short || String(channel || "");
+  }
+
+  function isBoilerplateLine(line) {
+    const s = String(line || "").trim();
+    if (!s) return true;
+    if (/^https?:\/\/\S+$/i.test(s)) return true;
+    return /^(unsubscribe|view (this|the) (message|listing|post)|to (view|reply|respond)|don'?t reply|do not reply|this (email|message) was sent|you received this|manage (your )?notifications?|©|copyright|sent from (kijiji|facebook|instagram)|click here|if you(''|\s)?do(n't| not) want|privacy policy|terms of (use|service)|help centre|help center|all rights reserved|this is an automated)/i.test(s);
+  }
+
+  function previewLine(text, subject) {
+    let t = String(text || "").replace(/\r/g, "");
+    const sub = String(subject || "").trim();
+    if (sub) {
+      const lower = t.toLowerCase();
+      const needle = sub.toLowerCase();
+      if (lower.indexOf(needle) === 0) t = t.slice(sub.length).replace(/^[\s\-:|]+/, "");
+    }
+    const lines = t.split(/\n/).map(function (line) { return line.trim(); }).filter(function (line) {
+      return line && !isBoilerplateLine(line);
+    });
+    return lines.join(" ").replace(/\s+/g, " ").trim();
+  }
+
+  function prettyLocalPart(email) {
+    const local = String(email || "").split("@")[0] || "";
+    if (!local || /no-?reply|mailer-daemon|notifications?/i.test(local)) return "";
+    const pretty = local.replace(/[._+]+/g, " ").replace(/\d+/g, " ").trim().split(/\s+/).filter(Boolean).map(function (word) {
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(" ");
+    if (!pretty || isPhoneLikeName(pretty)) return "";
+    return pretty;
+  }
+
+  function cleanNameCandidate(value) {
+    let n = String(value || "").replace(/['"]/g, "").trim();
+    if (!n || isPhoneLikeName(n)) return "";
+    if (/^(thanks|thank you|cheers|regards|sent|noreply|no-reply)$/i.test(n)) return "";
+    if (/@/.test(n)) return nameFromAddress(n, n) || "";
+    if (/no-?reply|kijiji|facebook|instagram|notification|sms@|forwarder|mailer/i.test(n)) return "";
+    return n;
+  }
+
+  function nameFromAddress(from, email) {
+    const raw = String(from || "").trim();
+    const angled = raw.match(/^(.*?)\s*<([^>]+)>/);
+    let display = (angled ? angled[1] : raw.replace(/<[^>]+>/g, "")).replace(/['"]/g, "").trim();
+    const addr = (angled && angled[2]) || email || "";
+    if (display && /@/.test(display)) display = "";
+    const cleaned = cleanNameCandidate(display);
+    if (cleaned) return cleaned;
+    return prettyLocalPart(addr || emailFromHeader(from));
+  }
+
   function slipStamp(person, messages, now) {
     const slip = slipOf(person, messages, now);
     if (slip === "followup" && person.followUpAt) return new Date(person.followUpAt).getTime();
@@ -393,15 +457,22 @@
   function nameFromMail(piece, channel) {
     const subject = String(piece.subject || "").trim();
     const fromSubject = subject.match(/(?:reply|message|text) from\s+(.+)/i);
-    if (fromSubject) return fromSubject[1].split(/[—–-]/)[0].trim();
-    const sent = subject.match(/^(.+?)\s+sent you a message/i);
-    if (sent) return sent[1].trim();
-    const dash = String(piece.body || "").match(/[—–-]\s*([A-Za-z][A-Za-z0-9 .''-]{1,60})\s*$/);
-    if (dash) return dash[1].trim();
-    const fromName = String(piece.from || "").replace(/<[^>]+>/g, "").replace(/"/g, "").trim();
-    if (fromName && !/no-?reply|kijiji|facebook|instagram|notification|sms@|forwarder|mailer/i.test(fromName)) {
-      return fromName;
+    if (fromSubject) {
+      const n = cleanNameCandidate(fromSubject[1].split(/[—–-]/)[0].trim());
+      if (n) return n;
     }
+    const sent = subject.match(/^(.+?)\s+sent you a message/i);
+    if (sent) {
+      const n = cleanNameCandidate(sent[1].trim());
+      if (n) return n;
+    }
+    const dash = String(piece.body || "").match(/[—–-]\s*([A-Za-z][A-Za-z .''-]{1,60})\s*$/);
+    if (dash) {
+      const n = cleanNameCandidate(dash[1].trim());
+      if (n && /\s/.test(n)) return n;
+    }
+    const fromName = nameFromAddress(piece.from, piece.email);
+    if (fromName) return fromName;
     const meta = (CJRM.CHANNEL_META || {})[channel];
     return (meta ? meta.name : "New") + " lead";
   }
@@ -501,6 +572,10 @@
   CJRM.isWaiting = isWaiting;
   CJRM.channelsUsed = channelsUsed;
   CJRM.previewText = previewText;
+  CJRM.previewLine = previewLine;
+  CJRM.sourceLabel = sourceLabel;
+  CJRM.isPhoneLikeName = isPhoneLikeName;
+  CJRM.nameFromAddress = nameFromAddress;
   CJRM.sortPeople = sortPeople;
   CJRM.matchesFilter = matchesFilter;
   CJRM.plusDays = plusDays;

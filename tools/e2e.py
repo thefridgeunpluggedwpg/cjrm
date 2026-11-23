@@ -1,4 +1,4 @@
-"""CJRM v1.1.3 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.4 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -72,7 +72,7 @@ def main():
         page.wait_for_selector("#pinnedLabel")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.3")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.4")
         check("demo banner is visible on first load", "Demo data" in page.inner_text("#demoBanner") and page.is_visible("#demoBanner"))
         check("demo banner says fictional / not real", "fictional" in page.inner_text("#demoBanner").lower() and "not real" in page.inner_text("#demoBanner").lower())
         check("privacy: data stays on the device is described in More later or header area", True)
@@ -178,6 +178,7 @@ def main():
           CJRM.render();
         }""")
         page.wait_for_selector(".lead-name")
+        page.evaluate("() => document.querySelectorAll('.toast').forEach((el) => el.remove())")
         names = page.evaluate("""() => [...document.querySelectorAll('#pinnedLabel + ul .lead-name, [aria-labelledby=\"pinnedLabel\"] .lead-name')].map((el) => el.textContent.trim())""")
         # fallback: any pinned lead names
         if "Devon Cho" not in names:
@@ -368,7 +369,7 @@ def main():
         check("new badge shows after items arrive", "2 new" in page.inner_text("#newCount").lower(), page.inner_text("#newCount"))
         page.evaluate("() => CJRM.clearNewBadge()")
 
-        # --- contact-form lead must appear on the desk (v1.1.3) ---
+        # --- contact-form lead must appear on the desk (v1.1.4) ---
         def handle_kyler_hub(route):
             req = route.request
             secret_q = req.url.split("secret=", 1)[1].split("&", 1)[0] if "secret=" in req.url else ""
@@ -559,10 +560,147 @@ def main():
             case_skip,
         )
 
+        page.set_viewport_size({"width": 412, "height": 915})
+        page.evaluate("""() => {
+          if (document.getElementById('btnDismissDemo')) document.getElementById('btnDismissDemo').click();
+          CJRM.revealFiledOnDesk && CJRM.revealFiledOnDesk();
+          CJRM.setView('desk');
+        }""")
+        page.wait_for_selector(".lead-name")
+        page.evaluate("() => document.querySelectorAll('.toast').forEach((el) => el.remove())")
+        card = page.evaluate("""() => {
+          const names = Array.from(document.querySelectorAll('.lead'));
+          const kyler = names.find((el) => (el.querySelector('.lead-name') || {}).textContent === 'Kyler Kuehl');
+          if (!kyler) return null;
+          return {
+            name: kyler.querySelector('.lead-name').textContent.trim(),
+            badge: (kyler.querySelector('.badge') || {}).textContent.trim(),
+            subject: (kyler.querySelector('.lead-subject') || {}).textContent || '',
+            preview: (kyler.querySelector('.lead-preview') || {}).textContent || '',
+          };
+        }""")
+        check(
+            "desk card for contact form shows Kyler Kuehl, Website form, subject and preview",
+            card is not None
+            and card.get("name") == "Kyler Kuehl"
+            and card.get("badge") == "Website form"
+            and "Contact form test - CJRM" in (card.get("subject") or "")
+            and "small deck repair" in (card.get("preview") or "").lower()
+            and "contact form test - cjrm" not in (card.get("preview") or "").lower(),
+            card,
+        )
+        desk_shot = os.path.join(ROOT, "demo", "desk-412x915.png")
+        page.screenshot(path=desk_shot, full_page=False)
+        check("desk screenshot written at 412x915", os.path.isfile(desk_shot), desk_shot)
+
+        kyler_id = page.evaluate("""() => {
+          const k = CJRM.getState().people.find((p) => p.name === 'Kyler Kuehl');
+          if (k) CJRM.setView('person', k.id);
+          return k && k.id;
+        }""")
+        page.wait_for_selector("#thread")
+        page.evaluate("() => document.querySelectorAll('.toast').forEach((el) => el.remove())")
+        thread_metrics = page.evaluate("""() => {
+          const thread = document.getElementById('thread');
+          const last = thread.querySelector('#thread .bubble-wrap:last-child .bubble');
+          const tr = thread.getBoundingClientRect();
+          const lr = last ? last.getBoundingClientRect() : null;
+          return {
+            viewH: window.innerHeight,
+            threadH: tr.height,
+            ratio: tr.height / window.innerHeight,
+            inView: !!(lr && lr.top >= tr.top - 2 && lr.bottom <= tr.bottom + 2),
+            lastH: lr && lr.height,
+            lastText: last ? last.innerText : '',
+          };
+        }""")
+        check(
+            "on 412x915 the thread is at least half the screen height",
+            thread_metrics.get("ratio") >= 0.5,
+            thread_metrics,
+        )
+        check(
+            "on 412x915 the last message is fully in view",
+            thread_metrics.get("inView") is True and "small deck repair" in (thread_metrics.get("lastText") or "").lower(),
+            thread_metrics,
+        )
+        person_shot = os.path.join(ROOT, "demo", "person-thread-412x915.png")
+        page.screenshot(path=person_shot, full_page=False)
+        check("person screenshot written at 412x915", os.path.isfile(person_shot), person_shot)
+
+        # Swipe-to-delete any thread message (a note we add), then long-press delete any desk card.
+        page.evaluate("""() => {
+          const k = CJRM.getState().people.find((p) => p.name === 'Kyler Kuehl');
+          CJRM.addMessage(k.id, { direction: 'note', channel: 'email', body: 'Disposable note to delete.' });
+          CJRM.setView('person', k.id);
+        }""")
+        page.wait_for_selector("#thread [data-msg-swipe]")
+        note = page.locator("#thread [data-msg-swipe]").last
+        box = note.bounding_box()
+        sx = box["x"] + box["width"] - 16
+        sy = box["y"] + box["height"] / 2
+        page.mouse.move(sx, sy)
+        page.mouse.down()
+        page.mouse.move(sx - 100, sy, steps=10)
+        page.mouse.up()
+        page.wait_for_timeout(200)
+        check("swipe reveals delete on a thread note", note.locator("[data-del-msg]").count() == 1)
+        page.once("dialog", lambda d: d.accept())
+        note.locator("[data-del-msg]").click()
+        page.wait_for_timeout(200)
+        gone = page.evaluate("() => CJRM.getState().messages.some((m) => /Disposable note to delete/.test(m.body||''))")
+        check("swipe delete removes any thread message, including a note", gone is False, gone)
+
+        types = page.evaluate("""() => {
+          const p = CJRM.newPerson({ name: 'Temp Types', channel: 'email' }, 'Inbound text body');
+          CJRM.addMessage(p.id, { direction: 'out', channel: 'phone1', body: 'Outgoing text body' });
+          CJRM.addMessage(p.id, { direction: 'note', channel: 'email', body: 'A plain note' });
+          const before = CJRM.getState().messages.filter((m) => m.personId === p.id).map((m) => m.direction);
+          const ids = CJRM.getState().messages.filter((m) => m.personId === p.id).map((m) => m.id);
+          ids.forEach((id) => CJRM.removeMessage(id));
+          const after = CJRM.getState().messages.filter((m) => m.personId === p.id).length;
+          return { before: before, after: after, id: p.id };
+        }""")
+        check(
+            "removeMessage deletes inbound, outbound, and notes with no type filter",
+            types.get("after") == 0 and set(types.get("before") or []) >= set(["in", "out", "note"]),
+            types,
+        )
+
+        page.evaluate("""([id]) => {
+          CJRM.setView('desk');
+          window.__delId = id;
+        }""", [types["id"]])
+        page.wait_for_selector("[data-person-swipe]")
+        temp = page.locator("[data-person-swipe]").filter(has_text="Temp Types")
+        tbox = temp.bounding_box()
+        page.mouse.move(tbox["x"] + tbox["width"] / 2, tbox["y"] + tbox["height"] / 2)
+        page.mouse.down()
+        page.wait_for_timeout(650)
+        page.mouse.up()
+        page.wait_for_timeout(200)
+        check("long-press reveals delete on any desk card", temp.locator("[data-del-person]").count() == 1)
+        page.evaluate("""() => {
+          const item = [...document.querySelectorAll('[data-person-swipe]')].find((el) => el.textContent.includes('Temp Types'));
+          if (item) item.scrollIntoView({block: 'center', inline: 'nearest'});
+        }""")
+        page.wait_for_timeout(150)
+        page.once("dialog", lambda d: d.accept())
+        page.evaluate("""() => {
+          const item = [...document.querySelectorAll('[data-person-swipe]')].find((el) => el.textContent.includes('Temp Types'));
+          const btn = item && item.querySelector('[data-del-person]');
+          if (btn) btn.click();
+        }""")
+        page.wait_for_timeout(200)
+        still = page.evaluate("() => CJRM.getState().people.some((p) => p.name === 'Temp Types')")
+        check("long-press delete removes any desk card, not just junk", still is False, still)
+
+        page.set_viewport_size({"width": 390, "height": 844})
+
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.3", "Version 1.1.3" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.4", "Version 1.1.4" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)

@@ -245,6 +245,27 @@
     persist(state);
   }
 
+  function removeMessage(id) {
+    const msg = state.messages.find(function (m) { return m.id === id; });
+    if (!msg) return false;
+    state.messages = state.messages.filter(function (m) { return m.id !== id; });
+    const person = personById(msg.personId);
+    if (person) {
+      const talk = state.messages.filter(function (m) {
+        return m.personId === person.id && m.direction !== "note";
+      });
+      const last = talk.length ? talk[talk.length - 1] : null;
+      const unread = talk.some(function (m) { return m.direction === "in" && person.unread; }) && person.unread;
+      patchPerson(person.id, {
+        lastMessageAt: last ? last.at : person.createdAt,
+        unread: Boolean(last && last.direction === "in" && unread)
+      });
+    } else {
+      persist(state);
+    }
+    return true;
+  }
+
   function filePieces(pieces, opts) {
     opts = opts || {};
     const settings = state.settings || {};
@@ -256,8 +277,11 @@
     const results = [];
     pieces.forEach(function (piece) {
       const channel = piece.channel || CJRM.classifyMail(piece, phones);
-      const name = piece.name || CJRM.nameFromMail(piece, channel);
-      const body = [piece.subject, piece.body].filter(Boolean).join("\n").trim();
+      let name = piece.name || CJRM.nameFromMail(piece, channel);
+      if (!String(name || "").trim() || (CJRM.isPhoneLikeName && CJRM.isPhoneLikeName(name))) {
+        name = CJRM.nameFromMail(piece, channel);
+      }
+      const body = String(piece.body || piece.subject || "").trim();
       const sourceId = piece.id || piece.sourceId || "";
       if (!body) {
         results.push({ status: "skipped", sourceId: sourceId, reason: "empty", name: name, channel: channel });
@@ -288,6 +312,7 @@
           if (!existing.phone && phone) patch.phone = phone;
           if (!existing.email && email) patch.email = email;
           if (CJRM.isClosed(existing)) patch.stage = "contacted";
+          if (piece.subject) patch.listing = piece.subject;
           patchPerson(existing.id, patch);
           filed += 1;
           results.push({ status: "matched", personId: existing.id, channel: channel, sourceId: sourceId, name: existing.name || name });
@@ -436,6 +461,7 @@
   CJRM.addMessage = addMessage;
   CJRM.newPerson = newPerson;
   CJRM.removePerson = removePerson;
+  CJRM.removeMessage = removeMessage;
   CJRM.filePieces = filePieces;
   CJRM.exportBag = exportBag;
   CJRM.importBag = importBag;

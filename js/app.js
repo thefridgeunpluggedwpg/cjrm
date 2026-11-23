@@ -18,6 +18,7 @@
     logLine: "phone1",
     logKind: "call",
     logDir: "in",
+    replyOpen: false,
   };
 
   let deferredPrompt = null;
@@ -91,6 +92,7 @@
 
   function setView(name, personId) {
     ui.view = name;
+    if (personId && personId !== ui.personId) ui.replyOpen = false;
     if (personId) ui.personId = personId;
     if (name === "desk" || name === "person") clearNewBadge();
     if (name !== "person") ui.personTab = "thread";
@@ -133,7 +135,11 @@
     bind();
     if (ui.view === "person" && ui.personTab === "thread") {
       const thread = document.getElementById("thread");
-      if (thread) thread.scrollTop = thread.scrollHeight;
+      if (thread) {
+        const last = thread.querySelector(".bubble-wrap:last-child .bubble, .bubble:last-child");
+        thread.scrollTop = thread.scrollHeight;
+        if (last && last.scrollIntoView) last.scrollIntoView({ block: "end", inline: "nearest" });
+      }
     }
   }
   CJRM.render = render;
@@ -182,21 +188,29 @@
     function row(p) {
       const slip = CJRM.slipOf(p, state.messages, now);
       const timer = slip ? CJRM.slipTimer(p, state.messages, now) : "";
-      const preview = CJRM.previewText(state.messages, p.id);
+      const preview = CJRM.previewLine
+        ? CJRM.previewLine(CJRM.previewText(state.messages, p.id), p.listing)
+        : CJRM.previewText(state.messages, p.id);
       const used = CJRM.channelsUsed(p, state.messages);
       const fresh = CJRM.isFresh && CJRM.isFresh(p);
       const cls = "lead" + (slip ? " is-pinned" : "") + (p.unread ? " is-unread" : "") + (fresh ? " is-fresh" : "");
-      const badgeMeta = CJRM.CHANNEL_META[p.channel] || { short: "?" };
+      const lastTalk = CJRM.lastSpoken ? CJRM.lastSpoken(state.messages, p.id) : null;
+      const badgeChannel = (lastTalk && lastTalk.channel) || p.channel;
+      const badgeLabel = CJRM.sourceLabel ? CJRM.sourceLabel(badgeChannel) : ((CJRM.CHANNEL_META[badgeChannel] || {}).short || "?");
       const stageMeta = CJRM.STAGE_META[p.stage] || { name: p.stage || "" };
-      return '<li><button type="button" class="' + cls + '" data-open="' + esc(p.id) + '">' +
-        '<span class="' + badgeClass(p.channel) + '">' + esc(badgeMeta.short) + "</span>" +
+      const subject = String(p.listing || "").trim();
+      const showSubject = subject && subject.toLowerCase() !== String(p.name || "").toLowerCase();
+      return '<li class="swipe-item" data-person-swipe="' + esc(p.id) + '">' +
+        '<div class="swipe-actions"><button type="button" class="btn-swipe-del" data-del-person="' + esc(p.id) + '">Delete</button></div>' +
+        '<button type="button" class="' + cls + '" data-open="' + esc(p.id) + '">' +
+        '<span class="' + badgeClass(badgeChannel) + '">' + esc(badgeLabel) + "</span>" +
         '<span class="lead-body"><p class="lead-name">' + esc(p.name) +
         (p.starred ? ' <span class="dot-unread" title="Starred" style="background:var(--wood)"></span>' : "") +
         "</p>" +
+        (showSubject ? '<p class="lead-subject">' + esc(subject) + "</p>" : "") +
         (preview ? '<p class="lead-preview">' + esc(preview) + "</p>" : "") +
         '<p class="lead-meta">' + esc(stageMeta.name) +
-        (p.listing ? " · " + esc(p.listing) : "") +
-        (used.length > 1 ? " · " + used.map(function (c) { return (CJRM.CHANNEL_META[c] || {}).short || c; }).join(" ") : "") +
+        (used.length > 1 ? " · " + used.map(function (c) { return CJRM.sourceLabel ? CJRM.sourceLabel(c) : ((CJRM.CHANNEL_META[c] || {}).short || c); }).join(" ") : "") +
         "</p></span>" +
         '<span class="lead-side">' +
         (fresh ? '<span class="fresh-tag">New</span>' : "") +
@@ -241,9 +255,15 @@
     const now = CJRM.now();
     const slip = CJRM.slipOf(person, state.messages, now);
     const thread = CJRM.threadOf(state.messages, person.id);
-    const head = '<div class="subhead"><button type="button" class="icon-btn" id="btnBackDesk" aria-label="Back to the desk">' +
+    const lastTalk = CJRM.lastSpoken ? CJRM.lastSpoken(state.messages, person.id) : null;
+    const sourceChannel = (lastTalk && lastTalk.channel) || person.channel;
+    const source = CJRM.sourceLabel ? CJRM.sourceLabel(sourceChannel) : ((CJRM.CHANNEL_META[sourceChannel] || {}).name || "");
+    const subject = String(person.listing || "").trim();
+    const head = '<div class="person-sheet"><div class="subhead"><button type="button" class="icon-btn" id="btnBackDesk" aria-label="Back to the desk">' +
       '<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>' +
       "<h1>" + esc(person.name) + "</h1></div>" +
+      '<p class="person-source"><span class="' + badgeClass(sourceChannel) + '">' + esc(source) + "</span>" +
+      (subject ? esc(subject) : "") + "</p>" +
       (slip ? '<p class="section-label">' + esc(CJRM.slipTimer(person, state.messages, now)) + "</p>" : "") +
       '<div class="subtabs" role="tablist">' +
       '<button type="button" role="tab" data-ptab="thread" aria-selected="' + (ui.personTab === "thread") + '">Thread</button>' +
@@ -295,14 +315,17 @@
         '<div class="photos" id="photoGrid"></div>' +
         '<label class="btn-secondary" style="display:inline-flex"><input type="file" id="photoFile" accept="image/*" hidden>Add photo</label>' +
         '<button type="button" class="btn-danger" id="btnRemovePerson">Remove this person</button>' +
-        "</div>";
+        "</div></div>";
     }
 
     const bubbles = thread.map(function (m) {
-      const who = m.direction === "note" ? "Note" : (m.direction === "out" ? "You" : "Them") + " · " + CJRM.CHANNEL_META[m.channel].name;
-      return '<article class="bubble ' + m.direction + '"><p class="who">' + esc(who) + "</p><p>" + esc(m.body) +
-        "</p><time datetime=\"" + esc(m.at) + '">' + esc(CJRM.formatWhen(m.at)) + "</time></article>";
-    }).join("") || "<p class='lede'>No messages yet. Log a call or paste a reply below.</p>";
+      const meta = CJRM.CHANNEL_META[m.channel] || {};
+      const who = m.direction === "note" ? "Note" : (m.direction === "out" ? "You" : (person.name || "Them")) + " · " + (CJRM.sourceLabel ? CJRM.sourceLabel(m.channel) : (meta.name || ""));
+      return '<div class="swipe-item bubble-wrap ' + m.direction + '" data-msg-swipe="' + esc(m.id) + '">' +
+        '<div class="swipe-actions"><button type="button" class="btn-swipe-del" data-del-msg="' + esc(m.id) + '">Delete</button></div>' +
+        '<article class="bubble ' + m.direction + '"><p class="who">' + esc(who) + "</p><p>" + esc(m.body) +
+        "</p><time datetime=\"" + esc(m.at) + '">' + esc(CJRM.formatWhen(m.at)) + "</time></article></div>";
+    }).join("") || "<p class='lede'>No messages yet. Log a call or write a reply below.</p>";
 
     const templates = (state.templates || []).map(function (t) {
       return '<button type="button" class="chip" data-tpl="' + esc(t.id) + '">' + esc(t.title) + "</button>";
@@ -310,21 +333,27 @@
 
     const channelOpts = (CJRM.CHANNELS || []).map(function (c) {
       const sel = c === person.channel ? " selected" : "";
-      return '<option value="' + c + '"' + sel + ">" + esc(CJRM.CHANNEL_META[c].name) + "</option>";
+      return '<option value="' + c + '"' + sel + ">" + esc((CJRM.CHANNEL_META[c] || {}).name || c) + "</option>";
     }).join("");
 
+    const actionsHidden = ui.replyOpen ? "" : " hidden";
     return head + '<div class="thread" id="thread">' + bubbles + "</div>" +
-      '<div class="composer">' +
-      '<div class="row" style="margin-top:0">' + templates + "</div>" +
-      '<textarea id="replyBody" placeholder="Write a reply to copy into the other app, or a note for the file."></textarea>' +
-      '<div class="row"><label class="field" style="flex:1"><span>Send via</span>' +
-      '<select id="replyVia">' + channelOpts + "</select></label></div>" +
-      '<div class="row">' +
+      '<div class="composer' + (ui.replyOpen ? " is-open" : "") + '" id="composer">' +
+      (templates ? '<div class="tpl-row">' + templates + "</div>" : "") +
+      '<div class="composer-bar">' +
+      '<label class="visually-hidden" for="replyBody">Write a reply</label>' +
+      '<textarea id="replyBody" rows="1" placeholder="Write a reply"></textarea>' +
+      '<button type="button" class="btn" id="btnToggleReply">' + (ui.replyOpen ? "Hide" : "Reply") + "</button>" +
+      "</div>" +
+      '<div class="composer-actions" id="composerActions"' + actionsHidden + ">" +
+      '<label class="field composer-via"><span>Send via</span>' +
+      '<select id="replyVia">' + channelOpts + "</select></label>" +
+      '<div class="composer-btns">' +
       '<button type="button" class="btn" id="btnCopyReply">Copy reply</button>' +
       '<button type="button" class="btn-wood" id="btnOpenApp">Open in app</button>' +
       '<button type="button" class="btn-secondary" id="btnLogOut">Log as sent</button>' +
       '<button type="button" class="btn-ghost" id="btnNote">Save note</button>' +
-      "</div></div>";
+      "</div></div></div></div>";
   }
 
   function field(label, id, value, type) {
@@ -545,8 +574,175 @@
       "</div>";
   }
 
+
+  function setComposerOpen(open) {
+    ui.replyOpen = Boolean(open);
+    const actions = $("composerActions");
+    const composer = $("composer");
+    const toggle = $("btnToggleReply");
+    if (actions) actions.hidden = !ui.replyOpen;
+    if (composer) composer.classList.toggle("is-open", ui.replyOpen);
+    if (toggle) toggle.textContent = ui.replyOpen ? "Hide" : "Reply";
+    const box = $("replyBody");
+    if (box && ui.replyOpen) {
+      resizeReplyBox(box);
+      box.focus();
+    } else if (box) {
+      box.style.height = "44px";
+    }
+  }
+
+  function resizeReplyBox(box) {
+    if (!box) return;
+    box.style.height = "44px";
+    const next = Math.max(44, Math.min(box.scrollHeight, 120));
+    box.style.height = next + "px";
+  }
+
+  function bindComposer() {
+    const box = $("replyBody");
+    const toggle = $("btnToggleReply");
+    if (toggle) toggle.addEventListener("click", function () {
+      setComposerOpen(!ui.replyOpen);
+    });
+    if (!box) return;
+    if (ui.replyOpen) resizeReplyBox(box);
+    box.addEventListener("focus", function () { setComposerOpen(true); });
+    box.addEventListener("input", function () {
+      if (box.value.trim()) setComposerOpen(true);
+      resizeReplyBox(box);
+    });
+  }
+
+  function closeOpenSwipes(except) {
+    document.querySelectorAll(".swipe-item.is-open").forEach(function (el) {
+      if (el !== except) el.classList.remove("is-open");
+    });
+  }
+
+  function deletePersonCard(id) {
+    const person = CJRM.personById(id);
+    const label = person && person.name ? person.name : "this person";
+    if (!confirm("Remove " + label + " and their thread from this device?")) return;
+    CJRM.removePerson(id);
+    if (ui.personId === id) ui.personId = null;
+    setView("desk");
+  }
+
+  function deleteThreadMessage(id) {
+    if (!confirm("Delete this message from the thread?")) return;
+    CJRM.removeMessage(id);
+    render();
+  }
+
+  function bindSwipeAndLongPress(el, onDelete) {
+    const handle = el.querySelector("[data-open], .bubble") || el;
+    let startX = 0, startY = 0, tracking = false, longTimer = null, gesturing = false, lastOpened = false;
+
+    function clearTimer() {
+      if (longTimer) { clearTimeout(longTimer); longTimer = null; }
+    }
+
+    function armLongPress() {
+      clearTimer();
+      longTimer = setTimeout(function () {
+        longTimer = null;
+        gesturing = true;
+        closeOpenSwipes(el);
+        el.classList.add("is-open");
+        if (navigator.vibrate) navigator.vibrate(12);
+        handle.style.transform = "";
+      }, 520);
+    }
+
+    handle.addEventListener("pointerdown", function (e) {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      startX = e.clientX;
+      startY = e.clientY;
+      tracking = true;
+      gesturing = false;
+      lastOpened = el.classList.contains("is-open");
+      try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+      armLongPress();
+    });
+    handle.addEventListener("pointermove", function (e) {
+      if (!tracking) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimer();
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+        gesturing = true;
+        closeOpenSwipes(el);
+        const shift = Math.max(-88, Math.min(0, lastOpened ? dx - 88 : dx));
+        const target = handle;
+        target.style.transition = "none";
+        target.style.transform = "translateX(" + shift + "px)";
+        if (shift < -48) el.classList.add("is-open");
+        else el.classList.remove("is-open");
+      }
+    });
+    function endPointer(e) {
+      if (!tracking) return;
+      tracking = false;
+      clearTimer();
+      const target = handle;
+      target.style.transition = "";
+      const dx = e && e.clientX != null ? e.clientX - startX : 0;
+      if (dx < -64) {
+        gesturing = true;
+        el.classList.add("is-open");
+        target.style.transform = "";
+      } else if (dx > 24) {
+        el.classList.remove("is-open");
+        target.style.transform = "";
+      } else if (!el.classList.contains("is-open")) {
+        target.style.transform = "";
+      } else {
+        target.style.transform = "";
+      }
+    }
+    handle.addEventListener("pointerup", endPointer);
+    handle.addEventListener("pointercancel", endPointer);
+    handle.addEventListener("click", function (e) {
+      if (gesturing || el.classList.contains("is-open") || lastOpened) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (lastOpened && !gesturing) el.classList.remove("is-open");
+        gesturing = false;
+      }
+    }, true);
+  }
+
+  function bindSwipeDeletes(view) {
+    closeOpenSwipes(null);
+    view.querySelectorAll("[data-person-swipe]").forEach(function (el) {
+      const id = el.getAttribute("data-person-swipe");
+      bindSwipeAndLongPress(el, function () { deletePersonCard(id); });
+    });
+    view.querySelectorAll("[data-msg-swipe]").forEach(function (el) {
+      const id = el.getAttribute("data-msg-swipe");
+      bindSwipeAndLongPress(el, function () { deleteThreadMessage(id); });
+    });
+    view.querySelectorAll("[data-del-person]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        deletePersonCard(btn.getAttribute("data-del-person"));
+      });
+    });
+    view.querySelectorAll("[data-del-msg]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteThreadMessage(btn.getAttribute("data-del-msg"));
+      });
+    });
+  }
+
   function bind() {
     const view = $("view");
+    bindSwipeDeletes(view);
+    bindComposer();
 
     view.querySelectorAll("[data-filter]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -671,7 +867,11 @@
     view.querySelectorAll("[data-tpl]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const t = CJRM.getState().templates.find(function (x) { return x.id === btn.getAttribute("data-tpl"); });
-        if (t && $("replyBody")) $("replyBody").value = t.body;
+        if (t && $("replyBody")) {
+          $("replyBody").value = t.body;
+          setComposerOpen(true);
+          resizeReplyBox($("replyBody"));
+        }
       });
     });
     if ($("btnCopyReply")) $("btnCopyReply").addEventListener("click", async function () {

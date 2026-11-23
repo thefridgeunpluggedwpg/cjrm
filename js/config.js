@@ -1,8 +1,8 @@
-/* CJRM v1.1.3 — shared constants. Nothing here is a real client or secret. */
+/* CJRM v1.1.4 — shared constants. Nothing here is a real client or secret. */
 (function (global) {
   const CJRM = global.CJRM || (global.CJRM = {});
 
-  CJRM.VERSION = "1.1.3";
+  CJRM.VERSION = "1.1.4";
   CJRM.APP_NAME = "CJRM";
   CJRM.APP_TITLE = "Carpenter Johnny Relationship Management";
   CJRM.STORAGE_KEY = "cjrm-v1";
@@ -22,15 +22,15 @@
   ];
 
   CJRM.CHANNEL_META = {
-    kijiji: { short: "KJ", name: "Kijiji" },
-    facebook: { short: "FB", name: "Facebook" },
-    instagram: { short: "IG", name: "Instagram" },
-    whatsapp: { short: "WA", name: "WhatsApp" },
-    phone1: { short: "WPG", name: "Winnipeg number" },
-    phone2: { short: "TOR", name: "Toronto number" },
-    web: { short: "WEB", name: "Website" },
-    email: { short: "EM", name: "Email" },
-    manual: { short: "IN", name: "Manual" },
+    kijiji: { short: "KJ", name: "Kijiji", badge: "Kijiji" },
+    facebook: { short: "FB", name: "Facebook", badge: "Facebook" },
+    instagram: { short: "IG", name: "Instagram", badge: "Instagram" },
+    whatsapp: { short: "WA", name: "WhatsApp", badge: "WhatsApp" },
+    phone1: { short: "WPG", name: "Winnipeg number", badge: "Winnipeg" },
+    phone2: { short: "TOR", name: "Toronto number", badge: "Toronto" },
+    web: { short: "WEB", name: "Website form", badge: "Website form" },
+    email: { short: "EM", name: "Email", badge: "Email" },
+    manual: { short: "IN", name: "Manual", badge: "Manual" },
   };
 
   CJRM.STAGES = ["new", "contacted", "quoted", "booked", "done", "lost"];

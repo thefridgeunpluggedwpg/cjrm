@@ -14,7 +14,7 @@ npm install
 npm run apk
 ```
 
-The signed APK is written to `android/app/build/outputs/apk/release/app-release.apk`. Rename a copy to `CJRM-v1.1.3.apk` for delivery.
+The signed APK is written to `android/app/build/outputs/apk/release/app-release.apk`. Rename a copy to `CJRM-v1.1.4.apk` for delivery.
 
 ## Google developer verification (as of 22 Nov 2026)
 
