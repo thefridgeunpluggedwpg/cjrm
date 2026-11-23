@@ -5,12 +5,12 @@
  * It labels lead emails and serves them as JSON to the CJRM PWA.
  *
  * Setup:
- *  1. File → Project properties → Script properties
+ *  1. File > Project properties > Script properties
  *     - CJRM_SECRET = a long random string (also paste it into the app)
- *  2. Deploy → New deployment → Web app
+ *  2. Deploy > New deployment > Web app
  *     - Execute as: Me
  *     - Who has access: Anyone with the link
- *  3. Paste the web-app URL and the secret into CJRM → More → Mailbox hub
+ *  3. Paste the web-app URL and the secret into CJRM > More > Mailbox hub
  *
  * Never put a real secret, phone number, or address in this file.
  */
