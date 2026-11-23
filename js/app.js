@@ -21,8 +21,8 @@
   };
 
   let deferredPrompt = null;
-  let pollTimer = null;
   let clockTimer = null;
+  let pendingNewCount = 0;
 
   function $(id) { return document.getElementById(id); }
 
@@ -44,9 +44,36 @@
     setTimeout(function () { el.remove(); }, 2800);
   }
 
+  function paintNewBadge() {
+    const el = $("newCount");
+    if (!el) return;
+    if (!pendingNewCount) {
+      el.hidden = true;
+      el.textContent = "New";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = pendingNewCount === 1 ? "1 new" : pendingNewCount + " new";
+  }
+
+  function clearNewBadge() {
+    pendingNewCount = 0;
+    paintNewBadge();
+  }
+
+  function notifyNewItems(filed) {
+    const n = Number(filed) || 0;
+    if (n <= 0) return;
+    pendingNewCount += n;
+    toast(n === 1 ? "New item on the desk." : n + " new items on the desk.");
+    paintNewBadge();
+    if (typeof CJRM.refresh === "function") CJRM.refresh();
+  }
+
   function setView(name, personId) {
     ui.view = name;
     if (personId) ui.personId = personId;
+    if (name === "desk" || name === "person") clearNewBadge();
     if (name !== "person") ui.personTab = "thread";
     document.querySelectorAll(".tabbar [data-view]").forEach(function (btn) {
       const on = btn.getAttribute("data-view") === (name === "person" ? "desk" : name);
@@ -71,6 +98,7 @@
       pin.dataset.empty = pinned.length ? "false" : "true";
       pin.textContent = pinned.length ? pinned.length + (pinned.length === 1 ? " due" : " due") : "All clear";
     }
+    paintNewBadge();
     const banner = $("demoBanner");
     if (banner) banner.hidden = !state.demo || ui.hideDemoBanner;
   }
@@ -449,7 +477,7 @@
       '<p class="version" id="appVersion">Version ' + esc(CJRM.VERSION) + "</p>" +
       '<div class="card stack">' +
       "<h2 style='margin-top:0'>Mailbox hub</h2>" +
-      "<p class='lede'>Paste the Apps Script web-app URL and the shared secret from ONBOARDING.md. The desk checks for new mail on its own while it is open.</p>" +
+      "<p class='lede'>Paste the Apps Script web-app URL and the shared secret from ONBOARDING.md. While CJRM is open, it checks the mailbox every 30 seconds, and again as soon as you come back to the app. You can still tap Check mailbox now if you want an extra check.</p>" +
       field("Endpoint URL", "hubUrl", s.hubUrl, "url") +
       '<label class="field"><span>Shared secret</span><input id="hubSecret" type="password" value="' + esc(s.hubSecret) + '" autocomplete="off"></label>' +
       field("Winnipeg number (for tagging forwarded texts)", "shopPhone", s.shopPhone, "tel") +
@@ -687,7 +715,10 @@
         personalPhone: $("personalPhone").value.trim(),
       });
       CJRM.setState({ settings: settings });
-      schedulePoll();
+      if (typeof CJRM.nativeSetHubConfig === "function") {
+        CJRM.nativeSetHubConfig(s.hubUrl, s.hubSecret).catch(function () {});
+      }
+      if (typeof CJRM.kickPoll === "function") CJRM.kickPoll("save");
       toast("Hub settings saved on this device.");
       render();
     });
@@ -807,16 +838,6 @@
     }
   }
 
-  function schedulePoll() {
-    if (pollTimer) clearInterval(pollTimer);
-    const s = CJRM.getState().settings || {};
-    if (!s.hubUrl) return;
-    const ms = Math.max(1, Number(s.pollMinutes) || 5) * 60 * 1000;
-    pollTimer = setInterval(function () {
-      CJRM.pollHub().then(function () { updateChrome(); }).catch(function (err) { CJRM.recordPollError(err); });
-    }, ms);
-  }
-
   function startClock() {
     if (clockTimer) clearInterval(clockTimer);
     clockTimer = setInterval(function () {
@@ -827,6 +848,7 @@
 
   function wireShell() {
     $("btnHome").addEventListener("click", function () { setView("desk"); });
+    if ($("newCount")) $("newCount").addEventListener("click", function () { setView("desk"); });
     document.querySelectorAll(".tabbar [data-view]").forEach(function (btn) {
       btn.addEventListener("click", function () { setView(btn.getAttribute("data-view")); });
     });
@@ -850,13 +872,16 @@
     render();
   };
 
+  CJRM.notifyNewItems = notifyNewItems;
+  CJRM.clearNewBadge = clearNewBadge;
+
   CJRM.start = function () {
     CJRM.hydrate();
     wireShell();
     render();
     offerInstall(false);
-    schedulePoll();
     startClock();
+    if (typeof CJRM.startAutoPoll === "function") CJRM.startAutoPoll();
     if (CJRM.isNativeApp && CJRM.isNativeApp()) {
       if (typeof CJRM.nativeStart === "function") CJRM.nativeStart();
     } else if ("serviceWorker" in navigator) {

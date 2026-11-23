@@ -1,4 +1,4 @@
-"""CJRM v1.1.1 end-to-end tests (Playwright + local Chrome).
+"""CJRM v1.1.2 end-to-end tests (Playwright + local Chrome).
 
 Serves the app itself on a free port unless CJRM_URL is set:
 
@@ -72,7 +72,7 @@ def main():
         page.wait_for_selector("#pinnedLabel")
 
         check("name: document title is CJRM", page.title() == "CJRM", page.title())
-        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.1")
+        check("APP_NAME and version constants", page.evaluate("CJRM.APP_NAME") == "CJRM" and page.evaluate("CJRM.VERSION") == "1.1.2")
         check("demo banner is visible on first load", "Demo data" in page.inner_text("#demoBanner") and page.is_visible("#demoBanner"))
         check("demo banner says fictional / not real", "fictional" in page.inner_text("#demoBanner").lower() and "not real" in page.inner_text("#demoBanner").lower())
         check("privacy: data stays on the device is described in More later or header area", True)
@@ -322,10 +322,56 @@ def main():
         }""")
         check("mocked hub rejects a wrong secret", "unauthorized" in unauthorized.lower() or "rejected" in unauthorized.lower(), unauthorized)
 
+        timings = page.evaluate("""() => ({
+          visible: CJRM.POLL_VISIBLE_MS,
+          backoff: CJRM.POLL_BACKOFF_START,
+          max: CJRM.POLL_BACKOFF_MAX
+        })""")
+        check(
+            "auto-poll is 30s with 60s to 5min backoff",
+            timings.get("visible") == 30000 and timings.get("backoff") == 60000 and timings.get("max") == 300000,
+            timings,
+        )
+
+        overlap = page.evaluate("""async () => {
+          let started = 0;
+          let release;
+          const orig = CJRM.pollHub;
+          CJRM.pollHub = () => {
+            started += 1;
+            return new Promise((resolve) => {
+              release = () => resolve({ filed: 0, fetched: 0, results: [] });
+            });
+          };
+          const p1 = CJRM.kickPoll('one');
+          const p2 = CJRM.kickPoll('two');
+          const mid = { started: started, inFlight: CJRM.isPollInFlight() };
+          if (typeof release === 'function') release();
+          await p1;
+          await p2;
+          CJRM.pollHub = orig;
+          return mid;
+        }""")
+        check("auto-poll does not overlap requests", overlap.get("started") == 1 and overlap.get("inFlight") is True, overlap)
+
+        auto = page.evaluate("""async () => {
+          CJRM.setState({ settings: Object.assign({}, CJRM.getState().settings, {
+            hubSecret: 'test-secret-cjrm'
+          })});
+          const r = await CJRM.kickPoll('e2e');
+          const s = CJRM.getState().settings;
+          return { filed: r && r.filed, ok: s.lastPollOk, last: s.lastPollAt, delay: CJRM.getPollDelayMs() };
+        }""")
+        check("kickPoll records Last check on success", auto.get("ok") is True and bool(auto.get("last")) and auto.get("delay") == 30000, auto)
+
+        page.evaluate("() => CJRM.notifyNewItems(2)")
+        check("new badge shows after items arrive", "2 new" in page.inner_text("#newCount").lower(), page.inner_text("#newCount"))
+        page.evaluate("() => CJRM.clearNewBadge()")
+
         # --- backup export / import ---
         page.evaluate("() => { CJRM.ui.view = 'more'; CJRM.render(); }")
         page.wait_for_selector("#btnExport")
-        check("More screen shows Version 1.1.1", "Version 1.1.1" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
+        check("More screen shows Version 1.1.2", "Version 1.1.2" in page.inner_text("#appVersion"), page.inner_text("#appVersion"))
         check("native SMS card is hidden in the web PWA", page.locator("#nativeSmsCard").count() == 0)
         check("native VoIP card is hidden in the web PWA", page.locator("#nativeVoipCard").count() == 0)
         check("isNativeApp is false in the browser", page.evaluate("CJRM.isNativeApp()") is False)

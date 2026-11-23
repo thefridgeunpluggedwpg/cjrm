@@ -73,9 +73,112 @@
     });
   }
 
+  /* Auto-poll while the desk is visible. 30s when healthy; back off on errors. */
+  const POLL_VISIBLE_MS = 30000;
+  const POLL_BACKOFF_START = 60000;
+  const POLL_BACKOFF_MAX = 5 * 60 * 1000;
+
+  let pollTimer = null;
+  let pollInFlight = false;
+  let pollDelayMs = POLL_VISIBLE_MS;
+  let pollWired = false;
+
+  function isPollVisible() {
+    try {
+      if (typeof document === "undefined") return true;
+      return document.visibilityState !== "hidden";
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function clearPollTimer() {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function afterPollUi(result) {
+    if (result && result.filed > 0 && typeof CJRM.notifyNewItems === "function") {
+      CJRM.notifyNewItems(result.filed);
+    } else if (typeof CJRM.refresh === "function") {
+      CJRM.refresh();
+    }
+  }
+
+  async function runPoll(reason) {
+    if (!isPollVisible()) return { skipped: "hidden" };
+    const settings = (CJRM.getState() && CJRM.getState().settings) || {};
+    if (!settings.hubUrl) return { skipped: "no-hub" };
+    if (pollInFlight) return { skipped: "busy" };
+    pollInFlight = true;
+    try {
+      const result = await CJRM.pollHub();
+      pollDelayMs = POLL_VISIBLE_MS;
+      afterPollUi(result);
+      return result;
+    } catch (err) {
+      recordPollError(err);
+      pollDelayMs = pollDelayMs >= POLL_BACKOFF_START
+        ? Math.min(pollDelayMs * 2, POLL_BACKOFF_MAX)
+        : POLL_BACKOFF_START;
+      if (typeof CJRM.refresh === "function") CJRM.refresh();
+      throw err;
+    } finally {
+      pollInFlight = false;
+      schedulePoll();
+    }
+  }
+
+  function schedulePoll() {
+    clearPollTimer();
+    if (!isPollVisible()) return;
+    const settings = (CJRM.getState() && CJRM.getState().settings) || {};
+    if (!settings.hubUrl) return;
+    pollTimer = setTimeout(function () {
+      runPoll("timer").catch(function () { /* already recorded */ });
+    }, pollDelayMs || POLL_VISIBLE_MS);
+  }
+
+  function kickPoll(reason) {
+    clearPollTimer();
+    return runPoll(reason || "kick").catch(function (err) {
+      return { error: String(err && err.message ? err.message : err) };
+    });
+  }
+
+  function wireAutoPoll() {
+    if (pollWired) return;
+    pollWired = true;
+    document.addEventListener("visibilitychange", function () {
+      if (isPollVisible()) kickPoll("visible");
+      else clearPollTimer();
+    });
+    window.addEventListener("online", function () { kickPoll("online"); });
+    window.addEventListener("pageshow", function () {
+      if (isPollVisible()) kickPoll("pageshow");
+    });
+  }
+
+  function startAutoPoll() {
+    wireAutoPoll();
+    pollDelayMs = POLL_VISIBLE_MS;
+    kickPoll("start");
+  }
+
   CJRM.hubUrlWithSecret = hubUrlWithSecret;
   CJRM.fetchHub = fetchHub;
   CJRM.pollHub = pollHub;
   CJRM.recordPollError = recordPollError;
   CJRM.asPieces = asPieces;
+  CJRM.POLL_VISIBLE_MS = POLL_VISIBLE_MS;
+  CJRM.POLL_BACKOFF_START = POLL_BACKOFF_START;
+  CJRM.POLL_BACKOFF_MAX = POLL_BACKOFF_MAX;
+  CJRM.isPollVisible = isPollVisible;
+  CJRM.isPollInFlight = function () { return pollInFlight; };
+  CJRM.getPollDelayMs = function () { return pollDelayMs; };
+  CJRM.schedulePoll = schedulePoll;
+  CJRM.kickPoll = kickPoll;
+  CJRM.startAutoPoll = startAutoPoll;
 })(window);

@@ -35,6 +35,10 @@ import java.util.Set;
         @Permission(
             alias = "sms",
             strings = { Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS }
+        ),
+        @Permission(
+            alias = "alerts",
+            strings = { Manifest.permission.POST_NOTIFICATIONS }
         )
     }
 )
@@ -45,6 +49,12 @@ public class CjrmNativePlugin extends Plugin {
     public void load() {
         super.load();
         instance = this;
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        notifyListeners("appResume", new JSObject(), false);
     }
 
     @Override
@@ -198,6 +208,40 @@ public class CjrmNativePlugin extends Plugin {
         out.put("voipPackage", NativeInbox.getVoipPackage(getContext()));
         out.put("voipAppLabel", NativeInbox.getVoipLabel(getContext()));
         out.put("notificationAccess", hasNotificationAccess());
+        call.resolve(out);
+    }
+
+    @PluginMethod
+    public void setHubConfig(PluginCall call) {
+        String url = call.getString("url", "");
+        String secret = call.getString("secret", "");
+        if (url == null) url = "";
+        if (secret == null) secret = "";
+        MailboxPrefs.save(getContext(), url, secret);
+        boolean scheduled = !url.trim().isEmpty();
+        if (scheduled) {
+            MailboxWork.schedule(getContext());
+            if (android.os.Build.VERSION.SDK_INT >= 33
+                    && !granted(Manifest.permission.POST_NOTIFICATIONS)) {
+                requestPermissionForAlias("alerts", call, "alertsCallback");
+                return;
+            }
+        } else {
+            MailboxWork.cancel(getContext());
+        }
+        JSObject out = new JSObject();
+        out.put("ok", true);
+        out.put("scheduled", scheduled);
+        call.resolve(out);
+    }
+
+    @PermissionCallback
+    public void alertsCallback(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("ok", true);
+        out.put("scheduled", true);
+        out.put("alertsGranted", android.os.Build.VERSION.SDK_INT < 33
+                || granted(Manifest.permission.POST_NOTIFICATIONS));
         call.resolve(out);
     }
 

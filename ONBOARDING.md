@@ -17,9 +17,9 @@ On the Android phone:
 3. The icon is the CJ stamp. Open CJRM from the home screen.
 4. On first open you will see **Demo data** — fictional leads with 555 numbers, so you can try the desk. When you are ready for real work, go to **More** and tap **Clear the desk**.
 
-To confirm the version, open **More**. It should say **Version 1.1.1**.
+To confirm the version, open **More**. It should say **Version 1.1.2**.
 
-If you are using the Android app file (CJRM-v1.1.1.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
+If you are using the Android app file (CJRM-v1.1.2.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the Winnipeg number, and optionally file VoIP-app notifications as the Toronto number. The mailbox hub steps below are the same.
 
 
 ## 2. Install the mailbox hub (Google Apps Script)
@@ -39,7 +39,7 @@ Johnny's email is the hub. Kijiji replies, Facebook and Instagram “someone sen
    - Who has access: **Anyone** (the secret still protects it)
 6. Authorize the script when Google asks (Gmail read + labels).
 7. Copy the web-app URL.
-8. In CJRM on the phone, open **More**. Paste the URL and the same secret. Fill in the Winnipeg and Toronto numbers if you have them. Tap **Save hub settings**, then **Check mailbox now**.
+8. In CJRM on the phone, open **More**. Paste the URL and the same secret. Fill in the Winnipeg and Toronto numbers if you have them. Tap **Save hub settings**. The desk starts checking the mailbox on its own (every 30 seconds while it is open). You can still tap **Check mailbox now** if you want an extra check.
 
 If the check fails, confirm the secret matches and that the deployment is a Web app, not a library. After you edit `Code.gs`, make a **New version** of the same deployment or the phone will still call the old one.
 
@@ -55,7 +55,7 @@ Recommended: [pppscn/SmsForwarder](https://github.com/pppscn/SmsForwarder) (dual
 2. Give it SMS (and optional call) permission. On Android 13+, allow notifications and disable battery restrictions for the app so it is not killed overnight.
 3. Add a send rule for the Winnipeg number (the SIM line) → email to Johnny's Gmail. Put `Text to Winnipeg number` and the Winnipeg number in the subject, for example: `Text to Winnipeg number 204-555-0140`. The older wording `Text to shop phone` still works.
 4. If you also forward the Toronto number, add a second rule to the same mailbox, with a subject like `Text to Toronto number` and that number. The older wording `Text to personal phone` still works.
-5. Send a test text to each line you set up. Confirm the emails arrive. In CJRM, tap **Check mailbox now**. The Winnipeg test should file under **WPG**, the Toronto test under **TOR**, and each should attach to the right person if the number or name already exists.
+5. Send a test text to each line you set up. Confirm the emails arrive. Leave CJRM open, or tap **Check mailbox now**. The Winnipeg test should file under **WPG**, the Toronto test under **TOR**, and each should attach to the right person if the number or name already exists.
 
 WhatsApp notices work the same way if he forwards them, or he can log them by hand. Personal WhatsApp and personal Facebook/Instagram DMs cannot be read directly. That is a later (v2) job, and only if he moves the business to a Page, Instagram Professional, or WhatsApp Business.
 

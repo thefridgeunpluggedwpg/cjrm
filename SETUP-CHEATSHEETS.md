@@ -22,9 +22,9 @@ Do not type the secret phrase or Johnny's real phone numbers into GitHub, a grou
 4. Tap **Install app** or **Add to Home screen**.
 5. Open CJRM from the home screen. The icon is the CJ stamp.
 6. Open **More** (bottom right).
-7. Confirm it says **Version 1.1.1**. If it shows an older number, close CJRM all the way (swipe it out of recent apps), open it again, and check **More** once more.
+7. Confirm it says **Version 1.1.2**. If it shows an older number, close CJRM all the way (swipe it out of recent apps), open it again, and check **More** once more.
 
-You are done with this part when **More** shows **Version 1.1.1**.
+You are done with this part when **More** shows **Version 1.1.2**.
 
 ---
 
@@ -36,15 +36,15 @@ You are done with this part when **More** shows **Version 1.1.1**.
 
 This installs the CJRM app file, which can read texts from this phone's SIM (the Winnipeg number) and, if you choose, from a VoIP app (the Toronto number). You do not need the SMS-forwarder app for the Winnipeg line if this works. The mailbox hub still needs to be set up (Sheet 1).
 
-1. Open the file named **CJRM-v1.1.1.apk** (from Kyler's Drive, in the CJRM folder).
+1. Open the file named **CJRM-v1.1.2.apk** (from Kyler's Drive, in the CJRM folder).
 2. If the phone asks whether to allow installs from this source, turn that on, then tap to install.
 3. Open CJRM. The icon is the CJ stamp.
-4. Open **More** (bottom right) and confirm it says **Version 1.1.1**.
+4. Open **More** (bottom right) and confirm it says **Version 1.1.2**.
 5. Under **Winnipeg number texts**, tap **Allow texts**, then allow SMS (and, if asked, allow reading texts so you can import recent ones).
 6. If the phone will not let you turn texts on, open **App info** from that same card (or hold the CJRM icon, tap App info). Tap the three dots at the top, then tap **Allow restricted settings**. Go back to CJRM and tap **Allow texts** again. This is common on Android 13 and newer.
 7. Confirm the green line says texts from this phone's SIM will be filed as the Winnipeg number.
 8. Optional: tap **Import recent texts** to pull in recent SIM texts already on the phone.
-9. Send a test text to the Winnipeg number from another phone, then open CJRM and look at the **Desk**. It should show the **WPG** badge.
+9. Send a test text to the Winnipeg number from another phone while CJRM is open. It should appear on the **Desk** with the **WPG** badge, without tapping a button.
 
 ### Optional: Toronto number (the VoIP line)
 
@@ -123,14 +123,14 @@ These are the same steps already proven to work. Do them again in Johnny's Googl
 38. In the box labelled **Endpoint URL**, paste the Web app URL you copied.
 39. Tap the **Shared secret** box, delete anything already in it, and type the secret phrase exactly as you wrote it down: all lowercase, single spaces, nothing after the last word.
 40. Tap **Save hub settings**.
-41. Tap **Check mailbox now**.
+41. Stay on **More** for a few seconds. A **Last check:** line should appear on its own. You can still tap **Check mailbox now** if you want an extra check.
 
 **You are done with this sheet when** you see a line that says **Last check:** followed by a date and time, with no red error.
 
 **If something goes wrong**
 
 - If it says **unauthorized**: the secret in the app does not match the one in the script. Delete everything in the **Shared secret** box, type the phrase again carefully, tap **Save hub settings**, then tap **Check mailbox now**.
-- If it says **Failed to fetch**: close CJRM all the way (swipe it out of recent apps), open it again, confirm **More** says **Version 1.1.1**, then tap **Check mailbox now**.
+- If it says **Failed to fetch**: close CJRM all the way (swipe it out of recent apps), open it again, confirm **More** says **Version 1.1.2**, then tap **Check mailbox now**.
 - If you are not sure the secret was saved: go back to **Project Settings**. If you see **Edit script properties**, it was saved. Open it and confirm the name is exactly `CJRM_SECRET`.
 
 ---
@@ -302,8 +302,8 @@ Use this after Sheet 1 is working. It confirms the mailbox can file a message, e
 5. Open that Gmail inbox and confirm the email arrived.
 6. On the phone, open CJRM.
 7. Tap **More**.
-8. Confirm it still says **Version 1.1.1**.
-9. Tap **Check mailbox now**.
+8. Confirm it still says **Version 1.1.2**.
+9. Stay on **More** for a few seconds, or tap **Check mailbox now**.
 10. Confirm you see **Last check:** followed by a date and time, with no red error.
 11. Open the **Desk** and look for the test item. It should show the **WEB** badge.
 

@@ -39,7 +39,7 @@ The APK lands at `android/app/build/outputs/apk/release/app-release.apk`. Later 
 
 ## Mailbox hub
 
-Email is the door into the desk. The Google Apps Script in [`apps-script/`](apps-script/) labels and classifies lead mail and serves it as JSON, protected by a shared secret. The PWA polls that endpoint from **More**. Step-by-step setup, including the SMS-forwarder for both phone lines, is in [ONBOARDING.md](ONBOARDING.md).
+Email is the door into the desk. The Google Apps Script in [`apps-script/`](apps-script/) labels and classifies lead mail and serves it as JSON, protected by a shared secret. The desk polls that endpoint every 30 seconds while it is open, and again as soon as you come back to the app. Step-by-step setup, including the SMS-forwarder for both phone lines, is in [ONBOARDING.md](ONBOARDING.md).
 
 ## What v1 does
 

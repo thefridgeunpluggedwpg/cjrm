@@ -56,11 +56,15 @@
     return messages;
   }
 
-  function fileNativeMessages(messages) {
+  function fileNativeMessages(messages, opts) {
     const pieces = nativeMessagesToPieces(coerceMessages({ messages: messages }));
     if (!pieces.length) return { filed: 0, fetched: 0, results: [] };
     const result = CJRM.filePieces(pieces);
-    if (typeof CJRM.refresh === "function") CJRM.refresh();
+    if (result.filed && !(opts && opts.silent) && typeof CJRM.notifyNewItems === "function") {
+      CJRM.notifyNewItems(result.filed);
+    } else if (typeof CJRM.refresh === "function") {
+      CJRM.refresh();
+    }
     return { filed: result.filed, fetched: pieces.length, results: result.results };
   }
 
@@ -110,11 +114,17 @@
     return p.setVoipApp({ packageName: packageName || "", label: label || "" });
   }
 
+  async function setHubConfig(url, secret) {
+    const p = plugin();
+    if (!p || typeof p.setHubConfig !== "function") return { ok: false };
+    return p.setHubConfig({ url: url || "", secret: secret || "" });
+  }
+
   async function importRecentSms() {
     const p = plugin();
     if (!p) throw new Error("Not running as the Android app.");
     const res = await p.importRecentSms({ limit: 100, days: 14 });
-    return fileNativeMessages((res && res.messages) || []);
+    return fileNativeMessages(coerceMessages(res), { silent: true });
   }
 
   async function start() {
@@ -129,6 +139,10 @@
           fileNativeMessages([msg]);
         } catch (err) { console.error(err); }
       });
+      p.addListener("appResume", function () {
+        run();
+        if (typeof CJRM.kickPoll === "function") CJRM.kickPoll("resume");
+      });
     };
     const run = async function () {
       listen();
@@ -138,12 +152,14 @@
         console.error(err);
       }
     };
+    const settings = (CJRM.getState() && CJRM.getState().settings) || {};
+    if (settings.hubUrl) setHubConfig(settings.hubUrl, settings.hubSecret).catch(function () {});
     await run();
-    setTimeout(run, 800);
-    setTimeout(run, 2500);
+    setTimeout(run, 400);
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") run();
     });
+    window.addEventListener("pageshow", function () { run(); });
   }
 
   CJRM.isNativeApp = isNativeApp;
@@ -156,6 +172,7 @@
   CJRM.nativeOpenNotificationAccess = openNotificationAccess;
   CJRM.nativeListApps = listApps;
   CJRM.nativeSetVoipApp = setVoipApp;
+  CJRM.nativeSetHubConfig = setHubConfig;
   CJRM.nativeImportRecentSms = importRecentSms;
   CJRM.nativeStart = start;
 })(window);

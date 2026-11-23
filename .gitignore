@@ -13,3 +13,5 @@ android/app/.cxx/
 *.keystore
 *.jks
 keystore.properties
+
+*.apk
