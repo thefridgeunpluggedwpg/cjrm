@@ -299,6 +299,138 @@
       "</div></div>";
   }
 
+
+  function renderNativeCards() {
+    if (!(CJRM.isNativeApp && CJRM.isNativeApp())) return "";
+    return '<div class="card stack" id="nativeSmsCard">' +
+      "<h2 style='margin-top:0'>Shop line texts (this phone's SIM)</h2>" +
+      "<p class='lede'>The Android app can file incoming texts from this phone's SIM as the shop line, even when the app is closed. The mailbox hub still works the same way.</p>" +
+      '<p id="smsStatus" class="lede">Checking text permission…</p>' +
+      "<p class='lede'>If the phone will not let you turn texts on, open App info, tap the three dots at the top, then tap <strong>Allow restricted settings</strong>. Then come back and tap Allow texts again. This is common on Android 13 and newer.</p>" +
+      '<div class="row">' +
+      '<button type="button" class="btn" id="btnSmsAllow">Allow texts</button>' +
+      '<button type="button" class="btn-secondary" id="btnSmsAppInfo">Open App info</button>' +
+      '<button type="button" class="btn-secondary" id="btnSmsImport">Import recent texts</button>' +
+      "</div></div>" +
+      '<div class="card stack" id="nativeVoipCard">' +
+      "<h2 style='margin-top:0'>VoIP line texts (optional)</h2>" +
+      "<p class='lede'>If the second number lives in a VoIP app, CJRM can file that app's message notifications as the VoIP line (the personal line). This is off until you turn on notification access and pick the app. Shop-line SIM texts still work if you skip this.</p>" +
+      '<p id="voipStatus" class="lede">Checking notification access…</p>' +
+      '<label class="field"><span>VoIP messaging app</span><select id="voipApp"><option value="">None — VoIP capture is off</option></select></label>' +
+      '<div class="row">' +
+      '<button type="button" class="btn" id="btnVoipAccess">Open notification access</button>' +
+      '<button type="button" class="btn-secondary" id="btnVoipSave">Save VoIP app</button>' +
+      "</div></div>";
+  }
+
+  async function fillNativeUi() {
+    if (!(CJRM.isNativeApp && CJRM.isNativeApp())) return;
+    const smsEl = $("smsStatus");
+    const voipEl = $("voipStatus");
+    const select = $("voipApp");
+    try {
+      const status = await CJRM.nativeGetStatus();
+      const smsOn = !!(status.smsReceiveGranted);
+      const smsRead = !!(status.smsReadGranted);
+      if (smsEl) {
+        if (smsOn) {
+          smsEl.className = "status-ok";
+          smsEl.textContent = "Texts from this phone's SIM will be filed as the shop line" + (smsRead ? ". Recent texts can be imported too." : ". Turn on read access if you want to import recent texts.");
+        } else {
+          smsEl.className = "status-bad";
+          smsEl.textContent = "Texts are not allowed yet. Tap Allow texts. If the switch is missing or greyed out, use Allow restricted settings in App info first.";
+        }
+      }
+      if (select && !select.dataset.loaded) {
+        const apps = await CJRM.nativeListApps();
+        const current = status.voipPackage || "";
+        const seen = {};
+        apps.forEach(function (app) {
+          if (!app || !app.packageName || seen[app.packageName]) return;
+          seen[app.packageName] = true;
+          const opt = document.createElement("option");
+          opt.value = app.packageName;
+          opt.textContent = (app.label || app.packageName) + " (" + app.packageName + ")";
+          if (app.packageName === current) opt.selected = true;
+          select.appendChild(opt);
+        });
+        if (current && !seen[current]) {
+          const opt = document.createElement("option");
+          opt.value = current;
+          opt.textContent = (status.voipAppLabel || current) + " (" + current + ")";
+          opt.selected = true;
+          select.appendChild(opt);
+        }
+        select.dataset.loaded = "1";
+      } else if (select && status.voipPackage) {
+        select.value = status.voipPackage;
+      }
+      if (voipEl) {
+        const access = !!(status.notificationAccess);
+        const pkg = status.voipPackage || "";
+        const label = status.voipAppLabel || pkg;
+        if (!access && !pkg) {
+          voipEl.className = "lede";
+          voipEl.textContent = "VoIP capture is off. To use it, tap Open notification access, turn on CJRM, then pick the VoIP app and tap Save VoIP app.";
+        } else if (!access) {
+          voipEl.className = "status-bad";
+          voipEl.textContent = "Notification access is off, so VoIP texts are not being captured. Tap Open notification access and turn on CJRM.";
+        } else if (!pkg) {
+          voipEl.className = "lede";
+          voipEl.textContent = "Notification access is on. Pick the app that receives the VoIP number's texts, then tap Save VoIP app.";
+        } else {
+          voipEl.className = "status-ok";
+          voipEl.textContent = "VoIP texts from " + label + " will be filed as the VoIP line.";
+        }
+      }
+    } catch (err) {
+      if (smsEl) {
+        smsEl.className = "status-bad";
+        smsEl.textContent = "Could not check text permission. " + (err && err.message ? err.message : "");
+      }
+    }
+  }
+
+  function bindNative() {
+    if ($("btnSmsAllow")) $("btnSmsAllow").addEventListener("click", async function () {
+      try {
+        await CJRM.nativeRequestSmsPermission();
+        toast("Checking text permission.");
+      } catch (err) {
+        toast(err.message || "Could not ask for text permission.");
+      }
+      fillNativeUi();
+    });
+    if ($("btnSmsAppInfo")) $("btnSmsAppInfo").addEventListener("click", async function () {
+      try { await CJRM.nativeOpenAppInfo(); } catch (err) { toast(err.message || "Could not open App info."); }
+    });
+    if ($("btnSmsImport")) $("btnSmsImport").addEventListener("click", async function () {
+      try {
+        const r = await CJRM.nativeImportRecentSms();
+        toast("Imported texts. Filed " + r.filed + " new " + (r.filed === 1 ? "item." : "items."));
+      } catch (err) {
+        toast(err.message || "Could not import recent texts. Allow texts, including read access, first.");
+      }
+      fillNativeUi();
+    });
+    if ($("btnVoipAccess")) $("btnVoipAccess").addEventListener("click", async function () {
+      try { await CJRM.nativeOpenNotificationAccess(); } catch (err) { toast(err.message || "Could not open notification access."); }
+    });
+    if ($("btnVoipSave")) $("btnVoipSave").addEventListener("click", async function () {
+      const select = $("voipApp");
+      const pkg = select ? select.value : "";
+      const label = select && select.selectedIndex >= 0 ? select.options[select.selectedIndex].textContent : "";
+      try {
+        await CJRM.nativeSetVoipApp(pkg, label);
+        toast(pkg ? "VoIP app saved." : "VoIP capture is off.");
+      } catch (err) {
+        toast(err.message || "Could not save the VoIP app.");
+      }
+      fillNativeUi();
+    });
+    if ($("nativeSmsCard")) fillNativeUi();
+  }
+
   function renderMore() {
     const state = CJRM.getState();
     const s = state.settings || {};
@@ -326,6 +458,7 @@
       '<div class="row"><button type="button" class="btn" id="btnSaveHub">Save hub settings</button>' +
       '<button type="button" class="btn-secondary" id="btnPollNow">Check mailbox now</button></div>' +
       "</div>" +
+      renderNativeCards() +
       '<div class="card stack">' +
       "<h2 style='margin-top:0'>Quick replies</h2>" + tpls +
       '<button type="button" class="btn-secondary" id="btnSaveTpl">Save templates</button>' +
@@ -568,6 +701,7 @@
       }
       render();
     });
+    bindNative();
     if ($("btnSaveTpl")) $("btnSaveTpl").addEventListener("click", function () {
       const templates = (CJRM.getState().templates || []).map(function (t) {
         const title = view.querySelector('[data-ttitle="' + t.id + '"]');
@@ -643,6 +777,10 @@
     const banner = $("installBanner");
     const copy = $("installCopy");
     const steps = $("iosSteps");
+    if (CJRM.isNativeApp && CJRM.isNativeApp()) {
+      if (force) toast("You are already in the Android app.");
+      return;
+    }
     const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
     if (standalone) {
       if (force) toast("CJRM is already installed.");
@@ -708,6 +846,10 @@
     });
   }
 
+  CJRM.refresh = function () {
+    render();
+  };
+
   CJRM.start = function () {
     CJRM.hydrate();
     wireShell();
@@ -715,7 +857,9 @@
     offerInstall(false);
     schedulePoll();
     startClock();
-    if ("serviceWorker" in navigator) {
+    if (CJRM.isNativeApp && CJRM.isNativeApp()) {
+      if (typeof CJRM.nativeStart === "function") CJRM.nativeStart();
+    } else if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("sw.js").catch(function () { /* offline register can wait */ });
     }
   };

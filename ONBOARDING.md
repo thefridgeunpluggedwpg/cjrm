@@ -17,7 +17,10 @@ On the Android phone:
 3. The icon is the CJ stamp. Open CJRM from the home screen.
 4. On first open you will see **Demo data** — fictional leads with 555 numbers, so you can try the desk. When you are ready for real work, go to **More** and tap **Clear the desk**.
 
-To confirm the version, open **More**. It should say **Version 1.0.0**.
+To confirm the version, open **More**. It should say **Version 1.1.0**.
+
+If you are using the Android app file (CJRM-v1.1.0.apk) instead of the browser install, follow **Install CJRM on Android** in [SETUP-CHEATSHEETS.md](SETUP-CHEATSHEETS.md). That app can file texts from this phone's SIM as the shop line, and optionally file VoIP-app notifications as the VoIP line. The mailbox hub steps below are the same.
+
 
 ## 2. Install the mailbox hub (Google Apps Script)
 

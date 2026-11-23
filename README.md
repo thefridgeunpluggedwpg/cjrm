@@ -23,6 +23,20 @@ python3 -m http.server 8765
 
 `CJRM_URL` can override the base URL.
 
+## Android app (v1.1)
+
+A signed Android app wraps this same desk and can file incoming texts from the phone's SIM as the shop line, even when the app is closed. An optional notification listener can file texts from a chosen VoIP app as the VoIP (personal) line. The web app in the browser is unchanged.
+
+Build the release APK on a machine with the Android SDK and the release key at `/home/box/secrets/cjrm-release.keystore` (never commit the key):
+
+```bash
+source tools/android-env.sh
+npm install
+npm run apk
+```
+
+The APK lands at `android/app/build/outputs/apk/release/app-release.apk`. Later updates must be signed with the same key so they install over the old copy.
+
 ## Mailbox hub
 
 Email is the door into the desk. The Google Apps Script in [`apps-script/`](apps-script/) labels and classifies lead mail and serves it as JSON, protected by a shared secret. The PWA polls that endpoint from **More**. Step-by-step setup, including the SMS-forwarder for both phone lines, is in [ONBOARDING.md](ONBOARDING.md).

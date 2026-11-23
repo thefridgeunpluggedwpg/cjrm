@@ -1,0 +1,8 @@
+{
+  "appId": "com.carpenterjohnny.cjrm",
+  "appName": "CJRM",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}

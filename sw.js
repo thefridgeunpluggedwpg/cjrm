@@ -1,4 +1,4 @@
-const CACHE = 'cjrm-v1.0.1';
+const CACHE = 'cjrm-v1.1.0';
 const FILES = [
   './',
   'index.html',
@@ -18,6 +18,7 @@ const FILES = [
   'js/demo.js',
   'js/storage.js',
   'js/hub.js',
+  'js/native.js',
   'js/app.js',
   'vendor/fonts/fonts.css',
   'vendor/fonts/alfa-slab-one-400.woff2',

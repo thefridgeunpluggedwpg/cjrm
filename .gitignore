@@ -1,2 +1,15 @@
 demo/cjrm-backup-test.json
 .DS_Store
+node_modules/
+www/
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/.cxx/
+*.keystore
+*.jks
+keystore.properties

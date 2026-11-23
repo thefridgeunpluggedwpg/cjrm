@@ -22,9 +22,45 @@ Do not type the secret phrase or Johnny's real phone numbers into GitHub, a grou
 4. Tap **Install app** or **Add to Home screen**.
 5. Open CJRM from the home screen. The icon is the CJ stamp.
 6. Open **More** (bottom right).
-7. Confirm it says **Version 1.0.1**. If it shows an older number, close CJRM all the way (swipe it out of recent apps), open it again, and check **More** once more.
+7. Confirm it says **Version 1.1.0**. If it shows an older number, close CJRM all the way (swipe it out of recent apps), open it again, and check **More** once more.
 
-You are done with this part when **More** shows **Version 1.0.1**.
+You are done with this part when **More** shows **Version 1.1.0**.
+
+---
+
+## Install CJRM on Android
+
+**Time:** about 10 minutes
+
+**Where:** Johnny's Android phone
+
+This installs the CJRM app file, which can read texts from this phone's SIM and, if you choose, from a VoIP app. You do not need the SMS-forwarder app for the SIM line if this works. The mailbox hub still needs to be set up (Sheet 1).
+
+1. Open the file named **CJRM-v1.1.0.apk** (from Kyler's Drive, in the CJRM folder).
+2. If the phone asks whether to allow installs from this source, turn that on, then tap to install.
+3. Open CJRM. The icon is the CJ stamp.
+4. Open **More** (bottom right) and confirm it says **Version 1.1.0**.
+5. Under **Shop line texts**, tap **Allow texts**, then allow SMS (and, if asked, allow reading texts so you can import recent ones).
+6. If the phone will not let you turn texts on, open **App info** from that same card (or hold the CJRM icon, tap App info). Tap the three dots at the top, then tap **Allow restricted settings**. Go back to CJRM and tap **Allow texts** again. This is common on Android 13 and newer.
+7. Confirm the green line says texts from this phone's SIM will be filed as the shop line.
+8. Optional: tap **Import recent texts** to pull in recent SIM texts already on the phone.
+9. Send a test text to the shop number from another phone, then open CJRM and look at the **Desk**. It should show the **SH** badge.
+
+### Optional: VoIP line (the second number)
+
+Do this only if the second number is in a VoIP app. Shop-line SIM texts still work if you skip it.
+
+10. Under **VoIP line texts**, tap **Open notification access**.
+11. In the list, turn on **CJRM**. Then go back to CJRM.
+12. In **VoIP messaging app**, pick the app that receives the VoIP number's texts.
+13. Tap **Save VoIP app**.
+14. Confirm the green line names that app and says texts will be filed as the VoIP line.
+15. Send a test text to the VoIP number, wait for the VoIP app's notification, then open CJRM and look at the **Desk**. It should show the **PE** badge.
+
+**You are done with this sheet when** a SIM test text appears on the Desk with the **SH** badge, and — if you set up VoIP — a VoIP test appears with the **PE** badge.
+
+If VoIP texts do not appear, confirm notification access is still on for CJRM, that the correct app is saved, and that the VoIP app actually showed a notification for the test.
+
 
 ---
 
@@ -94,7 +130,7 @@ These are the same steps already proven to work. Do them again in Johnny's Googl
 **If something goes wrong**
 
 - If it says **unauthorized**: the secret in the app does not match the one in the script. Delete everything in the **Shared secret** box, type the phrase again carefully, tap **Save hub settings**, then tap **Check mailbox now**.
-- If it says **Failed to fetch**: close CJRM all the way (swipe it out of recent apps), open it again, confirm **More** says **Version 1.0.1**, then tap **Check mailbox now**.
+- If it says **Failed to fetch**: close CJRM all the way (swipe it out of recent apps), open it again, confirm **More** says **Version 1.1.0**, then tap **Check mailbox now**.
 - If you are not sure the secret was saved: go back to **Project Settings**. If you see **Edit script properties**, it was saved. Open it and confirm the name is exactly `CJRM_SECRET`.
 
 ---
@@ -108,6 +144,8 @@ These are the same steps already proven to work. Do them again in Johnny's Googl
 CJRM cannot read text messages by itself. A free app on the Android phone forwards incoming texts to Johnny's Gmail. Then CJRM files them.
 
 This sheet is for Android. The official setup notes do not cover iPhone text forwarding, so do this on the Android phone that receives the shop and personal texts.
+
+If you already installed the Android app and shop-line texts are filing on the Desk, you can skip the SMS-forwarder steps below for the SIM line. Use the optional VoIP steps in **Install CJRM on Android** for the second number instead of a second forwarder rule.
 
 Use Johnny's real numbers. In the examples below, `204-555-0140` stands for the shop line and `204-555-0190` stands for the personal line. Do not type those 555 numbers into the app. Do not write the real numbers in GitHub or a group chat.
 
@@ -264,7 +302,7 @@ Use this after Sheet 1 is working. It confirms the mailbox can file a message, e
 5. Open that Gmail inbox and confirm the email arrived.
 6. On the phone, open CJRM.
 7. Tap **More**.
-8. Confirm it still says **Version 1.0.1**.
+8. Confirm it still says **Version 1.1.0**.
 9. Tap **Check mailbox now**.
 10. Confirm you see **Last check:** followed by a date and time, with no red error.
 11. Open the **Desk** and look for the test item. It should show the **WEB** badge.
