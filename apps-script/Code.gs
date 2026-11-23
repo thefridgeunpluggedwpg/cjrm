@@ -1,5 +1,5 @@
 /**
- * CJRM mailbox hub — Google Apps Script
+ * CJRM mailbox hub - Google Apps Script
  *
  * Install this in Johnny's own Google account (see ONBOARDING.md).
  * It labels lead emails and serves them as JSON to the CJRM PWA.
@@ -16,8 +16,15 @@
  */
 
 var LABEL_NAME = 'CJRM';
-var SEARCH =
-  'newer_than:14d (from:kijiji.ca OR from:kijiji.com OR from:facebookmail.com OR from:mail.instagram.com OR subject:"sent you a message" OR subject:"reply from" OR subject:"contact form" OR subject:"text to shop" OR subject:"text to personal" OR subject:SmsForwarder OR label:sms-forwarder OR list:kijiji OR subject:Kijiji)';
+var SEARCH = [
+  'newer_than:14d (',
+  'from:kijiji.ca OR from:kijiji.com',
+  'OR from:facebookmail.com OR from:mail.instagram.com',
+  'OR subject:"sent you a message" OR subject:"reply from"',
+  'OR subject:"contact form" OR subject:"text to shop"',
+  'OR subject:"text to personal" OR subject:SmsForwarder',
+  'OR label:sms-forwarder OR list:kijiji OR subject:Kijiji)'
+].join(' ');
 
 function doGet(e) {
   var secret = PropertiesService.getScriptProperties().getProperty('CJRM_SECRET') || '';
